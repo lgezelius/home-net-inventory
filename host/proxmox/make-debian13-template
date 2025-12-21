@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ---- customize these ----
-VMID=103
+VMID=500
 TEMPLATE_NAME="debian13-cloudinit-template"
 STORAGE="local-lvm"     # e.g. local-lvm, local-zfs, etc.
 BRIDGE="vmbr1"
