@@ -20,7 +20,7 @@ wget -O "$IMG" "$DEBIAN_CLOUD_IMG"
 
 # Create empty VM (no ISO install needed)
 qm create "$VMID" --name "$TEMPLATE_NAME" --memory "$MEM" --cores "$CORES" \
-  --net0 virtio,bridge="$BRIDGE" --scsihw virtio-scsi-pci --agent enabled=1 \
+  --net0 virtio,bridge="$BRIDGE",firewall=1 --scsihw virtio-scsi-pci --agent enabled=1 \
   --ostype l26
 
 # Import cloud image as disk
@@ -31,6 +31,9 @@ qm set "$VMID" --scsi0 "$STORAGE:vm-${VMID}-disk-0" --boot order=scsi0
 
 # Add Cloud-Init drive
 qm set "$VMID" --ide2 "$STORAGE:cloudinit"
+
+# Default Cloud-Init networking for clones (override per-VM as needed)
+qm set "$VMID" --ipconfig0 ip=dhcp
 
 # Make it nicer defaults
 qm set "$VMID" --serial0 socket --vga serial0
