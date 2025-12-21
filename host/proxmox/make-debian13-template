@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---- customize these ----
+VMID=103
+TEMPLATE_NAME="debian13-cloudinit-template"
+STORAGE="local-lvm"     # e.g. local-lvm, local-zfs, etc.
+BRIDGE="vmbr1"
+MEM=1024
+CORES=1
+DISK_SIZE="8G"
+DEBIAN_CLOUD_IMG="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
+# -------------------------
+
+WORKDIR="/var/lib/vz/template/qcow2"
+IMG="${WORKDIR}/debian-13-genericcloud-amd64.qcow2"
+
+mkdir -p "$WORKDIR"
+wget -O "$IMG" "$DEBIAN_CLOUD_IMG"
+
+# Create empty VM (no ISO install needed)
+qm create "$VMID" --name "$TEMPLATE_NAME" --memory "$MEM" --cores "$CORES" \
+  --net0 virtio,bridge="$BRIDGE" --scsihw virtio-scsi-pci --agent enabled=1 \
+  --ostype l26
+
+# Import cloud image as disk
+qm importdisk "$VMID" "$IMG" "$STORAGE"
+
+# Attach as SCSI0 and set boot
+qm set "$VMID" --scsi0 "$STORAGE:vm-${VMID}-disk-0" --boot order=scsi0
+
+# Add Cloud-Init drive
+qm set "$VMID" --ide2 "$STORAGE:cloudinit"
+
+# Make it nicer defaults
+qm set "$VMID" --serial0 socket --vga serial0
+
+# Resize root disk
+qm resize "$VMID" scsi0 "$DISK_SIZE"
+
+# Convert to template
+qm template "$VMID"
+
+echo "Template created: VMID=$VMID name=$TEMPLATE_NAME"
+echo "Now clone it and set Cloud-Init user/sshkey/ipconfig per-VM."
