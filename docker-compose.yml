@@ -5,7 +5,7 @@ services:
     network_mode: host
     environment:
       - INVENTORY_DB=/data/inventory.db
-      - INVENTORY_SCAN_CIDRS=192.168.1.0/24
+      - INVENTORY_SCAN_CIDRS=192.168.1.0/24,192.168.2.0/24
       - INVENTORY_SCAN_INTERVAL_SECONDS=1800
       - INVENTORY_NMAP_ARGS=-sn
     volumes:
