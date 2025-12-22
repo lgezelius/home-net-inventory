@@ -26,7 +26,7 @@ In the Proxmox VE UI, do the following:
   - Password: (your password)
   - SSH public key: (your public key, if you have one)
 
-Start the VM. It will take a while initialize. You can watch the the startup in the VM's ">_ Console".
+Start the VM. It may take a while initialize. You can watch the the startup in the VM's ">_ Console".
 
 Use the Proxmox console for the VM to log in using your username and password.
 
