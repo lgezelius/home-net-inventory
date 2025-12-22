@@ -77,6 +77,20 @@ Verify that docker and docker compose are installed.
 
 ### Install home-net-inventory
 
+Get the code:
+
     cd ~
     git clone https://github.com/lgezelius/home-net-inventory.git
+
+Create a data directory:
+
     cd home-net-inventory
+    mkdir -p data
+
+Confirm environment seeting:
+
+    nano docker-compose.yml
+
+Build and start the container:
+
+    docker compose up -d --build
