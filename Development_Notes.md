@@ -20,3 +20,10 @@ Create a virtual environment named .venv.
 Confirm that the bottom status bar shows that the virtual environment with the correct version is displayed when editing a Python file.
 
 Running "pip install -e ." created a home_net_inventory.egg-info directory. This directory should not be committed to git.
+
+Tests are in the /tests folder. To configure VS Code to run tests do the following:
+
+- Press ⌘⇧P and type "Python: Configure Tests"
+- Choose:
+  - pytest (pytest framework)
+  - directory containing the tests: tests
