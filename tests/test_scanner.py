@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 import subprocess
 
+import pytest
+
 from app.scanner import run_nmap_discovery, ScanHost
 
 NMAP_XML = """<?xml version="1.0"?>
@@ -19,6 +21,17 @@ NMAP_XML = """<?xml version="1.0"?>
 </nmaprun>
 """
 
+NMAP_XML_NO_SELF = """<?xml version=\"1.0\"?>
+<nmaprun>
+  <host>
+    <status state=\"up\"/>
+    <address addr=\"192.168.1.10\" addrtype=\"ipv4\"/>
+    <address addr=\"AA:BB:CC:DD:EE:01\" addrtype=\"mac\" vendor=\"Apple\"/>
+    <hostnames><hostname name=\"iphone.lan\"/></hostnames>
+  </host>
+</nmaprun>
+"""
+
 def test_run_nmap_discovery_parses_hosts(monkeypatch):
     def fake_run(args, capture_output, text):
         return SimpleNamespace(returncode=0, stdout=NMAP_XML, stderr="")
@@ -30,10 +43,15 @@ def test_run_nmap_discovery_parses_hosts(monkeypatch):
     hosts = run_nmap_discovery("192.168.1.0/24")
 
     assert len(hosts) == 2
-    assert hosts[0].ip == "192.168.1.10"
-    assert hosts[0].mac == "AA:BB:CC:DD:EE:01"
-    assert hosts[0].vendor == "Apple"
-    assert hosts[0].hostname == "iphone.lan"
+
+    by_ip = {h.ip: h for h in hosts}
+    assert by_ip["192.168.1.10"].mac == "AA:BB:CC:DD:EE:01"
+    assert by_ip["192.168.1.10"].vendor == "Apple"
+    assert by_ip["192.168.1.10"].hostname == "iphone.lan"
+
+    # self host is present in XML (MAC may be None depending on reconciliation)
+    assert "192.168.1.185" in by_ip
+    assert by_ip["192.168.1.185"].hostname == "home-net-inventory.lan"
 
 def test_local_identity_replaces_missing_mac(monkeypatch):
     def fake_run(args, capture_output, text):
@@ -57,3 +75,55 @@ def test_local_identity_replaces_missing_mac(monkeypatch):
     assert self_host.mac == "DE:AD:BE:EF:00:01"
     # keep hostname if nmap provided it
     assert self_host.hostname in ("home-net-inventory.lan", "home-net-inventory")
+
+
+def test_local_identity_is_added_if_missing_from_nmap(monkeypatch):
+    def fake_run(args, capture_output, text):
+        return SimpleNamespace(returncode=0, stdout=NMAP_XML_NO_SELF, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    local = ScanHost(
+        ip="192.168.1.185",
+        hostname="home-net-inventory",
+        mac="DE:AD:BE:EF:00:01",
+        vendor=None,
+    )
+    monkeypatch.setattr("app.scanner.get_local_identity", lambda: local)
+
+    hosts = run_nmap_discovery("192.168.1.0/24")
+    by_ip = {h.ip: h for h in hosts}
+    assert "192.168.1.185" in by_ip
+    assert by_ip["192.168.1.185"].mac == "DE:AD:BE:EF:00:01"
+
+
+def test_local_identity_not_added_if_outside_cidr(monkeypatch):
+    def fake_run(args, capture_output, text):
+        return SimpleNamespace(returncode=0, stdout=NMAP_XML_NO_SELF, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    local = ScanHost(
+        ip="192.168.1.185",
+        hostname="home-net-inventory",
+        mac="DE:AD:BE:EF:00:01",
+        vendor=None,
+    )
+    monkeypatch.setattr("app.scanner.get_local_identity", lambda: local)
+
+    hosts = run_nmap_discovery("192.168.2.0/24")
+    by_ip = {h.ip: h for h in hosts}
+    assert "192.168.1.185" not in by_ip
+
+
+def test_nmap_failure_raises(monkeypatch):
+    def fake_run(args, capture_output, text):
+        return SimpleNamespace(returncode=2, stdout="", stderr="nmap: something went wrong")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("app.scanner.get_local_identity", lambda: None)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        run_nmap_discovery("192.168.1.0/24")
+
+    assert "nmap failed" in str(excinfo.value)
