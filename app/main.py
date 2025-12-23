@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query, Depends
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import select, desc
@@ -102,9 +102,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             time.sleep(settings.scan_interval_seconds)
 
     @app.post("/scan")
-    def trigger_scan():
+    def trigger_scan(sync: bool = Query(False)):
+        if sync:
+            do_scan()
+            return {"ok": True, "mode": "sync"}
         threading.Thread(target=do_scan, daemon=True).start()
-        return {"ok": True}
+        return {"ok": True, "mode": "async"}
 
     @app.get("/scan/status")
     def scan_status():
