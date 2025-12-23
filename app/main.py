@@ -31,7 +31,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     app.state.scan_lock = threading.Lock()
     app.state.scan_state = {"running": False, "last_started": None, "last_finished": None, "last_error": None}
 
-    def get_db(request: Request):
+    def get_db(request: Request = Depends()):
         db = request.app.state.SessionLocal()
         try:
             yield db
