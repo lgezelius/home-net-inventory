@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
+from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import select, desc
 import threading
 import time
+import os
+import sys
 
 from .db import make_engine, make_sessionmaker, Base
 from .models import Device, Observation
@@ -17,7 +20,17 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
       - Creates tables
       - Optionally starts the scan loop (disable in tests)
     """
-    app = FastAPI(title="Home Net Inventory")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Startup
+        if start_scanner:
+            t = threading.Thread(target=scan_loop, daemon=True)
+            t.start()
+        yield
+        # Shutdown (nothing to clean up yet)
+
+    app = FastAPI(title="Home Net Inventory", lifespan=lifespan)
 
     resolved_url = db_url or settings.resolved_db_url()
     engine = make_engine(resolved_url)
@@ -31,7 +44,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     app.state.scan_lock = threading.Lock()
     app.state.scan_state = {"running": False, "last_started": None, "last_finished": None, "last_error": None}
 
-    def get_db(request: Request = Depends()):
+    def get_db(request: Request):
+        # FastAPI injects `Request` automatically for dependencies; do NOT wrap it in Depends().
         db = request.app.state.SessionLocal()
         try:
             yield db
@@ -86,12 +100,6 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         while True:
             do_scan()
             time.sleep(settings.scan_interval_seconds)
-
-    @app.on_event("startup")
-    def startup():
-        if start_scanner:
-            t = threading.Thread(target=scan_loop, daemon=True)
-            t.start()
 
     @app.post("/scan")
     def trigger_scan():
@@ -155,4 +163,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
 
 # Default app instance for uvicorn/docker: `uvicorn app.main:app`
-app = create_app()
+# When running under pytest, avoid touching the on-disk default DB path and avoid starting background threads.
+# PYTEST_CURRENT_TEST is not guaranteed to be set during collection/import, so also check sys.modules.
+_is_pytest = ("pytest" in sys.modules) or ("PYTEST_CURRENT_TEST" in os.environ)
+if _is_pytest:
+    app = create_app(
+        start_scanner=False,
+        db_url=os.getenv("INVENTORY_DB_URL", "sqlite+pysqlite:///:memory:"),
+    )
+else:
+    app = create_app()
