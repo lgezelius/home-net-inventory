@@ -14,21 +14,24 @@ from .scanner import run_nmap_discovery
 
 
 def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> FastAPI:
+    """Create the FastAPI app.
+
+    - Creates engine/sessionmaker
+    - Creates tables
+    - Optionally starts the background scan loop (disable in tests)
     """
-    App factory:
-      - Creates engine/sessionmaker
-      - Creates tables
-      - Optionally starts the scan loop (disable in tests)
-    """
+
+    def scan_loop():
+        while True:
+            do_scan()
+            time.sleep(settings.scan_interval_seconds)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Startup
         if start_scanner:
             t = threading.Thread(target=scan_loop, daemon=True)
             t.start()
         yield
-        # Shutdown (nothing to clean up yet)
 
     app = FastAPI(title="Home Net Inventory", lifespan=lifespan)
 
@@ -38,21 +41,26 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
     Base.metadata.create_all(bind=engine)
 
-    # Per-app state (important for tests and avoiding module-level globals)
     app.state.engine = engine
     app.state.SessionLocal = SessionLocal
     app.state.scan_lock = threading.Lock()
     app.state.scan_state = {"running": False, "last_started": None, "last_finished": None, "last_error": None}
+    app.state.background_scanner_enabled = start_scanner
 
     def get_db(request: Request):
-        # FastAPI injects `Request` automatically for dependencies; do NOT wrap it in Depends().
         db = request.app.state.SessionLocal()
         try:
             yield db
         finally:
             db.close()
 
-    def upsert_device_and_observation(db: Session, ip: str, hostname: str | None, mac: str | None, vendor: str | None):
+    def upsert_device_and_observation(
+        db: Session,
+        ip: str,
+        hostname: str | None,
+        mac: str | None,
+        vendor: str | None,
+    ) -> Device:
         device = None
 
         if mac:
@@ -70,9 +78,9 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         db.add(obs)
         return device
 
-    def do_scan():
+    def do_scan() -> bool:
         if not app.state.scan_lock.acquire(blocking=False):
-            return
+            return False
 
         try:
             app.state.scan_state["running"] = True
@@ -96,16 +104,22 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             app.state.scan_state["running"] = False
             app.state.scan_lock.release()
 
-    def scan_loop():
-        while True:
-            do_scan()
-            time.sleep(settings.scan_interval_seconds)
+        return True
 
     @app.post("/scan")
     def trigger_scan(sync: bool = Query(False)):
         if sync:
-            do_scan()
+            if app.state.background_scanner_enabled:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Sync scan not allowed while background scanner is enabled",
+                )
+
+            ran = do_scan()
+            if not ran:
+                raise HTTPException(status_code=409, detail="Scan already running")
             return {"ok": True, "mode": "sync"}
+
         threading.Thread(target=do_scan, daemon=True).start()
         return {"ok": True, "mode": "async"}
 
@@ -124,16 +138,18 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 .order_by(desc(Observation.seen_at))
                 .limit(1)
             )
-            out.append({
-                "id": d.id,
-                "mac": d.mac,
-                "vendor": d.vendor,
-                "display_name": d.display_name,
-                "first_seen": str(d.first_seen),
-                "last_seen": str(d.last_seen),
-                "last_ip": last_obs.ip if last_obs else None,
-                "last_hostname": last_obs.hostname if last_obs else None,
-            })
+            out.append(
+                {
+                    "id": d.id,
+                    "mac": d.mac,
+                    "vendor": d.vendor,
+                    "display_name": d.display_name,
+                    "first_seen": str(d.first_seen),
+                    "last_seen": str(d.last_seen),
+                    "last_ip": last_obs.ip if last_obs else None,
+                    "last_hostname": last_obs.hostname if last_obs else None,
+                }
+            )
         return out
 
     @app.get("/devices/{device_id}")
@@ -156,18 +172,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "display_name": d.display_name,
             "first_seen": str(d.first_seen),
             "last_seen": str(d.last_seen),
-            "observations": [
-                {"seen_at": str(o.seen_at), "ip": o.ip, "hostname": o.hostname}
-                for o in obs
-            ]
+            "observations": [{"seen_at": str(o.seen_at), "ip": o.ip, "hostname": o.hostname} for o in obs],
         }
 
     return app
 
 
 # Default app instance for uvicorn/docker: `uvicorn app.main:app`
-# When running under pytest, avoid touching the on-disk default DB path and avoid starting background threads.
-# PYTEST_CURRENT_TEST is not guaranteed to be set during collection/import, so also check sys.modules.
 _is_pytest = ("pytest" in sys.modules) or ("PYTEST_CURRENT_TEST" in os.environ)
 if _is_pytest:
     app = create_app(
