@@ -1,6 +1,6 @@
 # home-net-inventory
 
-## Install home-net-inventory
+## Install and run home-net-inventory
 
 Get the code:
 
@@ -44,3 +44,36 @@ Update the code:
     cd ~/home-net-inventory
     git pull
 
+## Restart with an empty DB
+
+Stop the running container:
+
+    docker compose down
+
+This should respond with the following:
+
+    [+] down 0/1
+    ⠸ Container home-net-inventory Removing 
+
+Delete the DB file.
+
+    rm -f data/inventory.db
+
+Rebuild and start the app.
+
+    docker compose up -d --build
+
+Trigger a scan (sync is best for a “review results” moment)
+
+    curl -s -X POST "http://localhost:8000/scan?sync=1" | jq .
+
+This should respond with the following:
+
+    {
+    "ok": true,
+    "mode": "sync"
+    }
+
+Review results:
+
+    curl -s http://localhost:8000/devices | jq 'length'
