@@ -1,4 +1,4 @@
-# Development Notes
+# Developmer Notes
 
 ## Created a virtual environment for testing
 
@@ -27,3 +27,17 @@ Tests are in the /tests folder. To configure VS Code to run tests do the followi
 - Choose:
   - pytest (pytest framework)
   - directory containing the tests: tests
+
+## Make
+
+The pyproject.toml engines optional dependencies for development / CI.
+
+- Developers / CI
+
+        pip install -e '.[dev]'
+        make test
+        make cov
+
+- Production / Docker
+
+        pip install .
