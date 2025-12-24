@@ -63,17 +63,14 @@ Rebuild and start the app.
 
     docker compose up -d --build
 
-Trigger a scan (sync is best for a “review results” moment)
+A background scan will automatically start.
 
-    curl -s -X POST "http://localhost:8000/scan?sync=1" | jq .
+Check status:
 
-This should respond with the following:
-
-    {
-    "ok": true,
-    "mode": "sync"
-    }
+    curl http://localhost:8000/scan/status
 
 Review results:
 
     curl -s http://localhost:8000/devices | jq 'length'
+
+     curl -s http://localhost:8000/devices | jq -r '.[] | "\(.last_ip // "-")\t\(.mac // "-")\t\(.vendor // "-")\t\(.last_hostname // "-")"' | sort -V
