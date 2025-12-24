@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
@@ -10,6 +10,13 @@ class Device(Base):
     display_name: Mapped[str | None] = mapped_column(String, nullable=True)
     first_seen: Mapped[str] = mapped_column(DateTime, server_default=func.now())
     last_seen: Mapped[str] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Last-known mDNS identity/type signals (best-effort, derived during scans).
+    # These are stored on Device (not Observation) to avoid duplicating large blobs per scan.
+    mdns_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    mdns_service_types: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    mdns_instances: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    mdns_txt: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
 
     observations: Mapped[list["Observation"]] = relationship(back_populates="device", cascade="all, delete-orphan")
 

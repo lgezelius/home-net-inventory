@@ -6,11 +6,19 @@ import threading
 import time
 import os
 import sys
+import re
 
 from .db import make_engine, make_sessionmaker, Base
 from .models import Device, Observation
 from .config import settings
 from .scanner import run_nmap_discovery
+
+try:
+    # Optional dependency; the app should still run without mDNS support.
+    from zeroconf import Zeroconf, ServiceBrowser  # type: ignore
+except Exception:  # pragma: no cover
+    Zeroconf = None  # type: ignore
+    ServiceBrowser = None  # type: ignore
 
 
 def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> FastAPI:
@@ -53,7 +61,209 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             yield db
         finally:
             db.close()
-    
+
+    def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
+        if not props:
+            return {}
+        out: dict[str, str] = {}
+        for k, v in props.items():
+            try:
+                ks = k.decode("utf-8", errors="ignore")
+            except Exception:
+                continue
+            try:
+                vs = v.decode("utf-8", errors="ignore")
+            except Exception:
+                vs = ""
+            out[ks] = vs
+        return out
+
+    def _filter_mdns_txt(txt: dict[str, str]) -> dict[str, str]:
+        # Keep keys that are useful for device identification; drop likely-sensitive tokens.
+        deny = {"authtag", "authTag", "token", "access_token", "password", "passwd"}
+        allow_prefixes = ("id", "identifier", "model", "md", "mf", "mfg", "manufacturer", "ver", "minver", "pv", "flags", "fn", "name", "device", "type")
+        out: dict[str, str] = {}
+        for k, v in txt.items():
+            if k in deny:
+                continue
+            kl = k.lower()
+            if kl in deny:
+                continue
+            if kl.startswith(allow_prefixes):
+                out[k] = v
+        # Cap size defensively
+        if len(out) > 25:
+            out = dict(list(out.items())[:25])
+        for k in list(out.keys()):
+            if out[k] is not None and len(out[k]) > 256:
+                out[k] = out[k][:256]
+        return out
+
+    _HEXISH_TAIL = re.compile(r"[0-9a-f]{16,}$", re.IGNORECASE)
+
+    def _service_instance_to_friendly(instance: str) -> str:
+        # Example: "Google-Nest-Mini-9770..._googlecast._tcp.local." -> "Google Nest Mini"
+        s = instance
+        s = s.rstrip(".")
+        # Drop the service type suffix if present
+        for suffix in (
+            "._googlecast._tcp.local",
+            "._hap._tcp.local",
+            "._airplay._tcp.local",
+            "._raop._tcp.local",
+            "._companion-link._tcp.local",
+            "._rdlink._tcp.local",
+            "._remotepairing._tcp.local",
+        ):
+            if s.lower().endswith(suffix):
+                s = s[: -len(suffix)]
+                break
+        # Remove long hex-ish tail after a dash
+        if "-" in s:
+            head, tail = s.rsplit("-", 1)
+            if _HEXISH_TAIL.match(tail):
+                s = head
+        # Replace separators with spaces
+        s = s.replace("_", " ").replace("-", " ").strip()
+        return s
+
+    def _server_to_hostname(server: str | None) -> str | None:
+        if not server:
+            return None
+        s = server.rstrip(".")
+        # Most are like "Larrys-iPhone.local." or "Sucia.local."
+        if s.lower().endswith(".local"):
+            s = s[: -len(".local")]
+        s = s.strip()
+        if not s:
+            return None
+        # Filter out very machine-id-ish hostnames
+        if len(s) >= 24 and re.fullmatch(r"[0-9a-f\-]{24,}", s, flags=re.IGNORECASE):
+            return None
+        return s
+
+    def _pick_best_name(hostname: str | None, instances: list[str]) -> str | None:
+        # Prefer a real hostname, otherwise derive from best-looking instance name.
+        if hostname:
+            return hostname
+        best: str | None = None
+        for inst in instances:
+            cand = _service_instance_to_friendly(inst)
+            if not cand:
+                continue
+            # Prefer names that don't look like UUIDs/hex blobs
+            if re.fullmatch(r"[0-9a-f\-]{16,}", cand, flags=re.IGNORECASE):
+                continue
+            if best is None or len(cand) > len(best):
+                best = cand
+        return best
+
+    def collect_mdns_signals(timeout_seconds: int = 6) -> dict[str, dict[str, object]]:
+        """Collect best-effort mDNS identity/type signals.
+
+        Returns a mapping: ip -> {"hostname": str|None, "service_types": list[str], "instances": list[str], "txt": dict[str,str]}
+        """
+        if Zeroconf is None or ServiceBrowser is None:
+            return {}
+
+        # High-signal service types for identification on typical home networks.
+        service_types = [
+            "_googlecast._tcp.local.",
+            "_hap._tcp.local.",
+            "_airplay._tcp.local.",
+            "_raop._tcp.local.",
+            "_companion-link._tcp.local.",
+            "_rdlink._tcp.local.",
+            "_remotepairing._tcp.local.",
+            "_ssh._tcp.local.",
+            "_sftp-ssh._tcp.local.",
+            "_workstation._tcp.local.",
+            "_printer._tcp.local.",
+            "_ipp._tcp.local.",
+            "_ipps._tcp.local.",
+        ]
+
+        zc = Zeroconf()
+        results: dict[str, dict[str, object]] = {}
+
+        def upsert_ip(ip: str) -> dict[str, object]:
+            if ip not in results:
+                results[ip] = {"hostname": None, "service_types": [], "instances": [], "txt": {}}
+            return results[ip]
+
+        class Listener:
+            def add_service(self, zc_obj, service_type: str, name: str):
+                info = zc_obj.get_service_info(service_type, name, timeout=1500)
+                if not info:
+                    return
+
+                # Prefer IPv4; keep IPv6-host-only data out for now.
+                ips: list[str] = []
+                try:
+                    for addr in info.addresses or []:
+                        if len(addr) == 4:
+                            ips.append(".".join(str(b) for b in addr))
+                except Exception:
+                    ips = []
+
+                if not ips:
+                    return
+
+                hostname = _server_to_hostname(getattr(info, "server", None))
+                txt = _filter_mdns_txt(_decode_txt(getattr(info, "properties", None)))
+
+                for ip in ips:
+                    rec = upsert_ip(ip)
+                    # Merge hostname
+                    if hostname and not rec.get("hostname"):
+                        rec["hostname"] = hostname
+
+                    # Merge service types (unique)
+                    st = rec.get("service_types")
+                    if isinstance(st, list) and service_type not in st:
+                        st.append(service_type)
+
+                    # Merge instances (unique)
+                    inst = rec.get("instances")
+                    if isinstance(inst, list) and name not in inst:
+                        inst.append(name)
+
+                    # Merge TXT (prefer existing keys; fill missing)
+                    t = rec.get("txt")
+                    if isinstance(t, dict) and txt:
+                        for k, v in txt.items():
+                            if k not in t:
+                                t[k] = v
+
+            def remove_service(self, zc_obj, service_type: str, name: str):
+                return
+
+            def update_service(self, zc_obj, service_type: str, name: str):
+                return
+
+        listeners = []
+        browsers = []
+        try:
+            for stype in service_types:
+                l = Listener()
+                listeners.append(l)
+                browsers.append(ServiceBrowser(zc, stype, l))
+            time.sleep(timeout_seconds)
+        finally:
+            try:
+                zc.close()
+            except Exception:
+                pass
+
+        # Add derived best_name into each record.
+        for ip, rec in results.items():
+            hostname = rec.get("hostname") if isinstance(rec.get("hostname"), str) else None
+            instances = rec.get("instances") if isinstance(rec.get("instances"), list) else []
+            best = _pick_best_name(hostname, [str(x) for x in instances])
+            rec["best_name"] = best
+
+        return results
+
     # update/insert device info into inventory
     def upsert_device_and_observation(
         db: Session,
@@ -61,6 +271,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         hostname: str | None,
         mac: str | None,
         vendor: str | None,
+        mdns: dict[str, object] | None = None,
     ) -> Device:
         device = None
 
@@ -74,6 +285,37 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
         if vendor and not device.vendor:
             device.vendor = vendor
+
+        # Update last-known mDNS identity/type signals on the Device.
+        if mdns:
+            best_name = mdns.get("best_name")
+            if isinstance(best_name, str) and best_name:
+                if not device.mdns_name:
+                    device.mdns_name = best_name
+                # Also seed display_name if empty (optional but convenient).
+                if not device.display_name:
+                    device.display_name = best_name
+
+            stypes = mdns.get("service_types")
+            if isinstance(stypes, list):
+                existing = set(device.mdns_service_types or [])
+                merged = list(existing.union({str(x) for x in stypes if x}))
+                device.mdns_service_types = sorted(merged)
+
+            inst = mdns.get("instances")
+            if isinstance(inst, list):
+                existing = set(device.mdns_instances or [])
+                merged = list(existing.union({str(x) for x in inst if x}))
+                # Cap to keep the DB from growing unbounded
+                device.mdns_instances = sorted(merged)[:50]
+
+            txt = mdns.get("txt")
+            if isinstance(txt, dict):
+                current = dict(device.mdns_txt or {})
+                for k, v in txt.items():
+                    if k not in current and isinstance(v, str):
+                        current[k] = v
+                device.mdns_txt = current
 
         obs = Observation(device_id=device.id, ip=ip, hostname=hostname)
         db.add(obs)
@@ -90,10 +332,18 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
             db = SessionLocal()
             try:
+                mdns_by_ip = collect_mdns_signals(timeout_seconds=6)
                 for cidr in settings.cidr_list():
                     hosts = run_nmap_discovery(cidr)
                     for h in hosts:
-                        upsert_device_and_observation(db, h.ip, h.hostname, h.mac, h.vendor)
+                        upsert_device_and_observation(
+                            db,
+                            h.ip,
+                            h.hostname,
+                            h.mac,
+                            h.vendor,
+                            mdns=mdns_by_ip.get(h.ip),
+                        )
                 db.commit()
             finally:
                 db.close()
@@ -145,6 +395,10 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     "mac": d.mac,
                     "vendor": d.vendor,
                     "display_name": d.display_name,
+                    "mdns_name": d.mdns_name,
+                    "mdns_service_types": d.mdns_service_types,
+                    "mdns_instances": d.mdns_instances,
+                    "mdns_txt": d.mdns_txt,
                     "first_seen": str(d.first_seen),
                     "last_seen": str(d.last_seen),
                     "last_ip": last_obs.ip if last_obs else None,
@@ -171,6 +425,10 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "mac": d.mac,
             "vendor": d.vendor,
             "display_name": d.display_name,
+            "mdns_name": d.mdns_name,
+            "mdns_service_types": d.mdns_service_types,
+            "mdns_instances": d.mdns_instances,
+            "mdns_txt": d.mdns_txt,
             "first_seen": str(d.first_seen),
             "last_seen": str(d.last_seen),
             "observations": [{"seen_at": str(o.seen_at), "ip": o.ip, "hostname": o.hostname} for o in obs],
