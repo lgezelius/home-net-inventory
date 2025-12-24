@@ -3,11 +3,26 @@ services:
     build: .
     container_name: home-net-inventory
     network_mode: host
+
     environment:
-      - INVENTORY_DB=/data/inventory.db
+      # SQLAlchemy DB URL (mounted at /data)
+      - INVENTORY_DB_URL=sqlite+pysqlite:////data/inventory.db
+
+      # Networks to scan
       - INVENTORY_SCAN_CIDRS=192.168.1.0/24,192.168.2.0/24
+
+      # Background scan interval (seconds)
       - INVENTORY_SCAN_INTERVAL_SECONDS=1800
+
+      # nmap arguments (ping scan only)
       - INVENTORY_NMAP_ARGS=-sn
+
+      # NOTE:
+      # - Background scanner runs automatically
+      # - /scan?sync=1 is for testing/debug only
+      # - Sync scans are rejected when background scanning is enabled
+
     volumes:
       - ./data:/data
+
     restart: unless-stopped
