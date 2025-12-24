@@ -53,7 +53,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             yield db
         finally:
             db.close()
-
+    
+    # update/insert device info into inventory
     def upsert_device_and_observation(
         db: Session,
         ip: str,
