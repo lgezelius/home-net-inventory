@@ -1,6 +1,6 @@
 
-
 from app.scanner import ScanHost
+import app.main as main
 
 
 def test_sync_scan_populates_devices(monkeypatch, client):
@@ -12,6 +12,8 @@ def test_sync_scan_populates_devices(monkeypatch, client):
 
     # Patch the reference used inside app.main
     monkeypatch.setattr("app.main.run_nmap_discovery", fake_run_nmap_discovery)
+    # Disable mDNS in tests to avoid multicast/network dependence and the mDNS browse sleep.
+    monkeypatch.setattr(main.settings, "enable_mdns", False)
 
     # Ensure we're in test-mode behavior: background scanning disabled
     client.app.state.background_scanner_enabled = False
@@ -49,3 +51,51 @@ def test_sync_scan_returns_409_when_scan_already_running(client):
         assert r.json()["detail"] == "Scan already running"
     finally:
         client.app.state.scan_lock.release()
+
+
+def test_last_seen_updates_on_rescan(monkeypatch, client):
+    # Same device returned across scans
+    def fake_run_nmap_discovery(cidr: str):
+        return [
+            ScanHost(ip="192.168.1.10", hostname="iphone.lan", mac="AA:BB:CC:DD:EE:01", vendor="Apple"),
+        ]
+
+    monkeypatch.setattr("app.main.run_nmap_discovery", fake_run_nmap_discovery)
+    # Disable mDNS in tests to avoid multicast/network dependence and the mDNS browse sleep.
+    monkeypatch.setattr(main.settings, "enable_mdns", False)
+
+    # Ensure sync scans are allowed
+    client.app.state.background_scanner_enabled = False
+
+    # Patch datetime.utcnow() used in app.main so we don't need to sleep.
+    class _FakeDateTime:
+        _times = [
+            __import__("datetime").datetime(2025, 1, 1, 0, 0, 0),
+            __import__("datetime").datetime(2025, 1, 1, 0, 0, 2),
+        ]
+
+        @classmethod
+        def utcnow(cls):
+            # Return the next time, but don't crash if called more than expected.
+            # Initialize _last on the first call.
+            if not hasattr(cls, "_last"):
+                cls._last = cls._times[0]
+            if cls._times:
+                cls._last = cls._times.pop(0)
+            return cls._last
+
+    monkeypatch.setattr(main, "datetime", _FakeDateTime)
+
+    r1 = client.post("/scan?sync=1")
+    assert r1.status_code == 200
+
+    d1 = client.get("/devices").json()[0]
+    last_seen_1 = __import__("datetime").datetime.fromisoformat(d1["last_seen"])
+
+    r2 = client.post("/scan?sync=1")
+    assert r2.status_code == 200
+
+    d2 = client.get("/devices").json()[0]
+    last_seen_2 = __import__("datetime").datetime.fromisoformat(d2["last_seen"])
+
+    assert last_seen_2 > last_seen_1

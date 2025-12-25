@@ -17,6 +17,9 @@ services:
       # nmap arguments (ping scan only)
       - INVENTORY_NMAP_ARGS=-sn
 
+      # Enable multicast DNS (mDNS) scanning
+      - ENABLE_MDNS=true
+
       # NOTE:
       # - Background scanner runs automatically
       # - /scan?sync=1 is for testing/debug only

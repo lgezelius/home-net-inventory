@@ -7,18 +7,13 @@ import time
 import os
 import sys
 import re
+from datetime import datetime
 
 from .db import make_engine, make_sessionmaker, Base
 from .models import Device, Observation
 from .config import settings
 from .scanner import run_nmap_discovery
-
-try:
-    # Optional dependency; the app should still run without mDNS support.
-    from zeroconf import Zeroconf, ServiceBrowser  # type: ignore
-except Exception:  # pragma: no cover
-    Zeroconf = None  # type: ignore
-    ServiceBrowser = None  # type: ignore
+from zeroconf import Zeroconf, ServiceBrowser
 
 
 def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> FastAPI:
@@ -163,8 +158,6 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
         Returns a mapping: ip -> {"hostname": str|None, "service_types": list[str], "instances": list[str], "txt": dict[str,str]}
         """
-        if Zeroconf is None or ServiceBrowser is None:
-            return {}
 
         # High-signal service types for identification on typical home networks.
         service_types = [
@@ -319,6 +312,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
         obs = Observation(device_id=device.id, ip=ip, hostname=hostname)
         db.add(obs)
+
+        # Ensure Device.last_seen advances whenever we record a new observation.
+        # Adding an Observation alone does not UPDATE the Device row, so SQLAlchemy's
+        # `onupdate=func.now()` won't fire unless we touch the Device.
+        # Use naive UTC timestamps; SQLite DateTime columns are typically naive.
+        device.last_seen = datetime.utcnow()
+
         return device
 
     def do_scan() -> bool:
@@ -332,7 +332,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
             db = SessionLocal()
             try:
-                mdns_by_ip = collect_mdns_signals(timeout_seconds=6)
+                mdns_by_ip = collect_mdns_signals(timeout_seconds=6) if settings.enable_mdns else {}
                 for cidr in settings.cidr_list():
                     hosts = run_nmap_discovery(cidr)
                     for h in hosts:

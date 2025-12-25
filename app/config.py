@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     scan_cidrs: str = Field(default="192.168.1.0/24", alias="INVENTORY_SCAN_CIDRS")
     scan_interval_seconds: int = Field(default=1800, alias="INVENTORY_SCAN_INTERVAL_SECONDS")
     nmap_args: str = Field(default="-sn", alias="INVENTORY_NMAP_ARGS")
+    enable_mdns: bool = True
 
     def cidr_list(self) -> list[str]:
         return [c.strip() for c in self.scan_cidrs.split(",") if c.strip()]
