@@ -1,4 +1,4 @@
-# Developmer Notes
+# Developer Notes
 
 ## Created a virtual environment for testing
 
@@ -27,6 +27,28 @@ Tests are in the /tests folder. To configure VS Code to run tests do the followi
 - Choose:
   - pytest (pytest framework)
   - directory containing the tests: tests
+
+## Tests
+
+To run test from the shell. First create a virtual environment (.venv) and then run:
+
+    pytest -q
+
+### Coverage Reports
+
+First install coverage, if that hasn't be done before.
+
+    pip install coverage # if not already installed
+
+Now run the run and view the coverage report in the shell.
+
+    coverage run -m pytest
+    coverage report -m
+
+Or run and view the coverage report in a browser.
+
+    coverage html
+    open htmlcov/index.html
 
 ## Make
 
