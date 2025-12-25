@@ -55,6 +55,11 @@ This should respond with the following:
     [+] down 0/1
     ⠸ Container home-net-inventory Removing 
 
+Or
+
+    [+] down 0/1
+    ⠸ Container home-net-inventory Stopping 
+
 Delete the DB file.
 
     rm -f data/inventory.db
