@@ -81,7 +81,7 @@ Rebuild and start the app.
 
 Check status:
 
-    curl http://localhost:8000/scan/status
+    curl http://localhost:8000/scan/status | jq
 
 Review results:
 
