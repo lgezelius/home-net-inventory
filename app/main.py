@@ -97,6 +97,14 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).isoformat()
 
+    def _normalize_mac(mac: str | None) -> str | None:
+        if not mac:
+            return None
+        mac = str(mac).strip()
+        if not mac:
+            return None
+        return mac.upper()
+
     def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
         if not props:
             return {}
@@ -306,6 +314,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         vendor: str | None,
         mdns: dict[str, object] | None = None,
     ) -> Device:
+        mac = _normalize_mac(mac)
+
         device = None
 
         if mac:

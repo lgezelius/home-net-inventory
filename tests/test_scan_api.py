@@ -102,6 +102,30 @@ def test_last_seen_updates_on_rescan(monkeypatch, client):
     assert last_seen_2 > last_seen_1
 
 
+def test_mac_addresses_are_normalized_and_deduped(monkeypatch, client):
+    scans = [
+        [ScanHost(ip="192.168.1.10", hostname="iphone.lan", mac="aa:bb:cc:dd:ee:01", vendor="Apple")],
+        [ScanHost(ip="192.168.1.11", hostname="iphone.lan", mac="AA:BB:CC:DD:EE:01", vendor="Apple")],
+    ]
+
+    def fake_run_nmap_discovery(cidr: str):
+        return scans.pop(0)
+
+    monkeypatch.setattr("app.main.run_nmap_discovery", fake_run_nmap_discovery)
+    monkeypatch.setattr(main.settings, "enable_mdns", False)
+    client.app.state.background_scanner_enabled = False
+
+    r1 = client.post("/scan?sync=1")
+    assert r1.status_code == 200
+
+    r2 = client.post("/scan?sync=1")
+    assert r2.status_code == 200
+
+    devices = client.get("/devices").json()
+    assert len(devices) == 1
+    assert devices[0]["mac"] == "AA:BB:CC:DD:EE:01"
+
+
 def test_async_scan_returns_409_when_scan_already_running(client):
     client.app.state.background_scanner_enabled = False
 
