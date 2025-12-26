@@ -35,6 +35,7 @@ Access should be restricted at the network or reverse-proxy level.
 | 200 | Success |
 | 400 | Bad request |
 | 404 | Resource not found |
+| 409 | Conflict (e.g., scan already running) |
 | 500 | Server error |
 
 ---
@@ -43,18 +44,12 @@ Access should be restricted at the network or reverse-proxy level.
 
 ### List Devices
 
-Returns all known devices in the inventory.
+Returns recent devices (sorted by `last_seen` desc). Use the optional `limit` query param (default 200).
 
 Endpoint:
 
 ```http
-GET /devices
-```
-
-Example request:
-
-```http
-GET /devices
+GET /devices?limit=200
 ```
 
 Response:
@@ -62,14 +57,18 @@ Response:
 ```json
 [
   {
-    "id": 1,
-    "hostname": "macbook-pro",
-    "ip_address": "192.168.1.20",
-    "mac_address": "AA:BB:CC:DD:EE:FF",
+    "id": 42,
+    "mac": "AA:BB:CC:DD:EE:FF",
     "vendor": "Apple",
-    "device_type": "computer",
-    "first_seen": "2025-12-20T18:22:11Z",
-    "last_seen": "2025-12-23T21:10:03Z"
+    "display_name": "Living Room Apple TV",
+    "mdns_name": "Apple TV",
+    "mdns_service_types": ["_airplay._tcp.local."],
+    "mdns_instances": ["Apple-TV-1234._airplay._tcp.local."],
+    "mdns_txt": {"model": "AppleTV6,2"},
+    "first_seen": "2025-12-23T21:10:03+00:00",
+    "last_seen": "2025-12-24T05:53:50+00:00",
+    "last_ip": "192.168.1.20",
+    "last_hostname": "apple-tv.lan"
   }
 ]
 ```
@@ -89,29 +88,33 @@ GET /devices/{device_id}
 Example request:
 
 ```http
-GET /devices/1
+GET /devices/42
 ```
 
 Response:
 
 ```json
 {
-  "id": 54,
-  "mac": "34:98:B5:AA:BB:CC",
-  "vendor": "Netgear",
-  "display_name": null,
-  "first_seen": "2025-12-24 05:53:50",
-  "last_seen": "2025-12-24 05:53:50",
+  "id": 42,
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "vendor": "Apple",
+  "display_name": "Living Room Apple TV",
+  "mdns_name": "Apple TV",
+  "mdns_service_types": ["_airplay._tcp.local."],
+  "mdns_instances": ["Apple-TV-1234._airplay._tcp.local."],
+  "mdns_txt": {"model": "AppleTV6,2"},
+  "first_seen": "2025-12-23T21:10:03+00:00",
+  "last_seen": "2025-12-24T05:53:50+00:00",
   "observations": [
     {
-      "seen_at": "2025-12-24 06:30:56",
-      "ip": "192.168.1.249",
-      "hostname": "RBS750P-B1CC.lan"
+      "seen_at": "2025-12-24T06:30:56+00:00",
+      "ip": "192.168.1.20",
+      "hostname": "apple-tv.lan"
     },
     {
-      "seen_at": "2025-12-24 05:53:50",
-      "ip": "192.168.1.249",
-      "hostname": "RBS750P-B1CC.lan"
+      "seen_at": "2025-12-24T05:53:50+00:00",
+      "ip": "192.168.1.20",
+      "hostname": "apple-tv.lan"
     }
   ]
 }
@@ -123,27 +126,22 @@ Response:
 
 ### Start Scan
 
-Initiates a new network scan.
+Initiates a new network scan. In normal operation the background scanner runs on an interval; use this endpoint for ad‑hoc runs.
 
 Endpoint:
 
 ```http
-GET /scan
+POST /scan
 ```
 
-Example request:
+Query parameters:
 
-```http
-GET /scan
-```
+- `sync` (bool, default `false`): when `true`, run in the request thread. Disallowed if the background scanner is enabled.
 
-Response:
+Responses:
 
-```json
-{
-  "status": "started"
-}
-```
+- `200` `{ "ok": true, "mode": "async" }` (or `"sync"` when `sync=1`)
+- `409` `{ "detail": "Scan already running" }` if a scan is in progress
 
 ---
 
@@ -167,11 +165,20 @@ Response:
 
 ```json
 {
-  "status": "idle"
+  "running": false,
+  "last_started": "2025-12-24T05:53:50+00:00",
+  "last_finished": "2025-12-24T05:54:02+00:00",
+  "last_error": null,
+  "macless_hosts": [
+    {
+      "ip": "192.168.1.50",
+      "hostname": "nomac.lan",
+      "vendor": "Acme",
+      "mdns_name": null
+    }
+  ]
 }
 ```
-
-*Note: Exact fields may vary; consult `/openapi.json` for the canonical schema.*
 
 ---
 

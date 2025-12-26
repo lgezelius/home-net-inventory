@@ -126,6 +126,28 @@ def test_mac_addresses_are_normalized_and_deduped(monkeypatch, client):
     assert devices[0]["mac"] == "AA:BB:CC:DD:EE:01"
 
 
+def test_macless_hosts_are_skipped_but_reported(monkeypatch, client):
+    def fake_run_nmap_discovery(cidr: str):
+        return [
+            ScanHost(ip="192.168.1.50", hostname="nomac.lan", mac=None, vendor="Acme"),
+        ]
+
+    monkeypatch.setattr("app.main.run_nmap_discovery", fake_run_nmap_discovery)
+    monkeypatch.setattr(main.settings, "enable_mdns", False)
+    client.app.state.background_scanner_enabled = False
+
+    r = client.post("/scan?sync=1")
+    assert r.status_code == 200
+
+    devices = client.get("/devices").json()
+    assert devices == []
+
+    status = client.get("/scan/status").json()
+    assert status["macless_hosts"] == [
+        {"ip": "192.168.1.50", "hostname": "nomac.lan", "vendor": "Acme", "mdns_name": None}
+    ]
+
+
 def test_async_scan_returns_409_when_scan_already_running(client):
     client.app.state.background_scanner_enabled = False
 

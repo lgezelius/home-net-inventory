@@ -49,7 +49,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     app.state.engine = engine
     app.state.SessionLocal = SessionLocal
     app.state.scan_lock = threading.Lock()
-    app.state.scan_state = {"running": False, "last_started": None, "last_finished": None, "last_error": None}
+    app.state.scan_state = {
+        "running": False,
+        "last_started": None,
+        "last_finished": None,
+        "last_error": None,
+        "last_macless_hosts": [],
+    }
     app.state.background_scanner_enabled = start_scanner
 
     def get_db(request: Request):
@@ -380,6 +386,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             app.state.scan_state["running"] = True
             app.state.scan_state["last_error"] = None
             app.state.scan_state["last_started"] = _utcnow()
+            app.state.scan_state["last_macless_hosts"] = []
 
             scan_tag = _utcnow().strftime("%Y%m%d-%H%M%S")
 
@@ -388,7 +395,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 mdns_by_ip = collect_mdns_signals(timeout_seconds=6) if settings.enable_mdns else {}
                 _write_debug_json(f"{scan_tag}-mdns.json", mdns_by_ip)
 
-                scan_summary = {"cidrs": settings.cidr_list(), "nmap_hosts": {}, "devices_upserted": 0}
+                scan_summary = {
+                    "cidrs": settings.cidr_list(),
+                    "nmap_hosts": {},
+                    "devices_upserted": 0,
+                    "macless_hosts": [],
+                }
                 for cidr in settings.cidr_list():
                     hosts = run_nmap_discovery(cidr)
 
@@ -405,17 +417,32 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     scan_summary["nmap_hosts"][cidr] = len(hosts)
 
                     for h in hosts:
+                        normalized_mac = _normalize_mac(h.mac)
+                        if not normalized_mac:
+                            mdns = mdns_by_ip.get(h.ip, {})
+                            scan_summary["macless_hosts"].append(
+                                {
+                                    "ip": h.ip,
+                                    "hostname": h.hostname,
+                                    "vendor": h.vendor,
+                                    "mdns_name": mdns.get("best_name"),
+                                }
+                            )
+                            continue
+
                         upsert_device_and_observation(
                             db,
                             h.ip,
                             h.hostname,
-                            h.mac,
+                            normalized_mac,
                             h.vendor,
                             mdns=mdns_by_ip.get(h.ip),
                         )
                         scan_summary["devices_upserted"] += 1
                 db.commit()
                 _write_debug_json(f"{scan_tag}-summary.json", scan_summary)
+                # Keep a lightweight record of mac-less hosts in memory for visibility via /scan/status
+                app.state.scan_state["last_macless_hosts"] = scan_summary["macless_hosts"]
             finally:
                 db.close()
 
@@ -460,6 +487,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "last_started": _dt_iso(st["last_started"]),
             "last_finished": _dt_iso(st["last_finished"]),
             "last_error": st["last_error"],
+            "macless_hosts": st.get("last_macless_hosts", []),
         }
 
     @app.get("/devices")
