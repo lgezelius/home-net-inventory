@@ -100,3 +100,16 @@ def test_last_seen_updates_on_rescan(monkeypatch, client):
     last_seen_2 = __import__("datetime").datetime.fromisoformat(d2["last_seen"])
 
     assert last_seen_2 > last_seen_1
+
+
+def test_async_scan_returns_409_when_scan_already_running(client):
+    client.app.state.background_scanner_enabled = False
+
+    acquired = client.app.state.scan_lock.acquire(blocking=False)
+    assert acquired is True
+    try:
+        r = client.post("/scan")
+        assert r.status_code == 409
+        assert r.json()["detail"] == "Scan already running"
+    finally:
+        client.app.state.scan_lock.release()

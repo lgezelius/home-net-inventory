@@ -433,6 +433,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 raise HTTPException(status_code=409, detail="Scan already running")
             return {"ok": True, "mode": "sync"}
 
+        # Refuse to launch another async scan if one is already running.
+        if not app.state.scan_lock.acquire(blocking=False):
+            raise HTTPException(status_code=409, detail="Scan already running")
+        # Release immediately; the background thread will acquire before scanning.
+        app.state.scan_lock.release()
+
         threading.Thread(target=do_scan, daemon=True).start()
         return {"ok": True, "mode": "async"}
 
