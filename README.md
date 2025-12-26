@@ -44,6 +44,17 @@ Update the code:
     cd ~/home-net-inventory
     git pull
 
+Run the updated version:
+
+    docker compose up -d --build
+
+Note that this is functionally equivalent to:
+
+    docker compose build
+    docker compose up -d
+
+A background scan will start at this point.
+
 ## Restart with an empty DB
 
 Stop the running container:
@@ -67,8 +78,6 @@ Delete the DB file.
 Rebuild and start the app.
 
     docker compose up -d --build
-
-A background scan will automatically start.
 
 Check status:
 
