@@ -24,6 +24,10 @@ Monitor the logs:
 
     curl http://localhost:8000/scan/status
 
+UI (devices list):
+
+    curl http://localhost:8000/ui/devices
+
 In a separate terminal:
 
 Check the scan status:

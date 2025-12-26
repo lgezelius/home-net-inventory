@@ -8,6 +8,7 @@ WORKDIR /app
 
 COPY pyproject.toml /app/
 COPY app /app/app
+COPY templates /app/templates
 
 RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir .
 
