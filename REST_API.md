@@ -46,6 +46,9 @@ Access should be restricted at the network or reverse-proxy level.
 
 Returns recent devices (sorted by `last_seen` desc). Use the optional `limit` query param (default 200).
 
+- `device_name`: model-like identity (often from mDNS TXT `md` or derived best name)
+- `friendly_name`: user-facing name (often from mDNS TXT `fn`)
+
 Endpoint:
 
 ```http
@@ -60,6 +63,8 @@ Response:
     "id": 42,
     "mac": "AA:BB:CC:DD:EE:FF",
     "vendor": "Apple",
+    "device_name": "Apple TV 4K",
+    "friendly_name": "Living Room Apple TV",
     "display_name": "Living Room Apple TV",
     "mdns_name": "Apple TV",
     "mdns_service_types": ["_airplay._tcp.local."],
@@ -98,6 +103,8 @@ Response:
   "id": 42,
   "mac": "AA:BB:CC:DD:EE:FF",
   "vendor": "Apple",
+  "device_name": "Apple TV 4K",
+  "friendly_name": "Living Room Apple TV",
   "display_name": "Living Room Apple TV",
   "mdns_name": "Apple TV",
   "mdns_service_types": ["_airplay._tcp.local."],

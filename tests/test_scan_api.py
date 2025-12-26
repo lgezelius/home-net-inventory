@@ -148,6 +148,84 @@ def test_macless_hosts_are_skipped_but_reported(monkeypatch, client):
     ]
 
 
+def test_device_and_friendly_names_derived_from_mdns(monkeypatch, client):
+    def fake_run_nmap_discovery(cidr: str):
+        return [
+            ScanHost(ip="192.168.1.168", hostname="Google-Home-Mini-6DA1.lan", mac="38:8b:59:49:6d:a1", vendor="Google"),
+        ]
+
+    mdns_signals = {
+        "192.168.1.168": {
+            "hostname": "Google-Home-Mini-6DA1",
+            "service_types": ["_googlecast._tcp.local."],
+            "instances": ["Google-Home-Mini-9d95500e3427e9fd2f59ac62adcbd649._googlecast._tcp.local."],
+            "txt": {"id": "9d95500e3427e9fd2f59ac62adcbd649", "md": "Google Home Mini", "fn": "Dawn's Study Speaker"},
+            "best_name": "Google Home Mini",
+        }
+    }
+
+    monkeypatch.setattr("app.main.run_nmap_discovery", fake_run_nmap_discovery)
+    monkeypatch.setattr("app.main.collect_mdns_signals", lambda timeout_seconds=6: mdns_signals)
+    client.app.state.background_scanner_enabled = False
+
+    r = client.post("/scan?sync=1")
+    assert r.status_code == 200
+
+    device = client.get("/devices").json()[0]
+    assert device["device_name"] == "Google Home Mini"
+    assert device["friendly_name"] == "Dawn's Study Speaker"
+    assert device["display_name"] == "Dawn's Study Speaker"
+    assert device["mdns_name"] == "Google Home Mini"
+    assert device["mac"] == "38:8B:59:49:6D:A1"
+
+
+def test_display_name_updates_when_friendly_name_arrives(monkeypatch, client):
+    scans = [
+        [ScanHost(ip="192.168.1.168", hostname="Google-Home-Mini.lan", mac="38:8b:59:49:6d:a1", vendor="Google")],
+        [ScanHost(ip="192.168.1.168", hostname="Google-Home-Mini.lan", mac="38:8b:59:49:6d:a1", vendor="Google")],
+    ]
+
+    mdns_sequences = [
+        {
+            "192.168.1.168": {
+                "hostname": "Google-Home-Mini",
+                "service_types": ["_googlecast._tcp.local."],
+                "instances": ["Google-Home-Mini._googlecast._tcp.local."],
+                "txt": {"md": "Google Home Mini"},
+                "best_name": "Google Home Mini",
+            }
+        },
+        {
+            "192.168.1.168": {
+                "hostname": "Google-Home-Mini",
+                "service_types": ["_googlecast._tcp.local."],
+                "instances": ["Google-Home-Mini._googlecast._tcp.local."],
+                "txt": {"md": "Google Home Mini", "fn": "Dawn's Study Speaker"},
+                "best_name": "Google Home Mini",
+            }
+        },
+    ]
+
+    def fake_run_nmap_discovery(cidr: str):
+        return scans.pop(0)
+
+    monkeypatch.setattr("app.main.run_nmap_discovery", fake_run_nmap_discovery)
+    monkeypatch.setattr("app.main.collect_mdns_signals", lambda timeout_seconds=6: mdns_sequences.pop(0))
+    client.app.state.background_scanner_enabled = False
+
+    r1 = client.post("/scan?sync=1")
+    assert r1.status_code == 200
+    device1 = client.get("/devices").json()[0]
+    assert device1["display_name"] == "Google Home Mini"
+    assert device1["friendly_name"] is None
+
+    r2 = client.post("/scan?sync=1")
+    assert r2.status_code == 200
+    device2 = client.get("/devices").json()[0]
+    assert device2["display_name"] == "Dawn's Study Speaker"
+    assert device2["friendly_name"] == "Dawn's Study Speaker"
+
+
 def test_async_scan_returns_409_when_scan_already_running(client):
     client.app.state.background_scanner_enabled = False
 

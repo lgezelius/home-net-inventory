@@ -111,6 +111,16 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             return None
         return mac.upper()
 
+    def _mdns_device_and_friendly(txt: dict[str, str] | None, best_name: str | None) -> tuple[str | None, str | None]:
+        """Derive model-like and friendly names from TXT/best_name."""
+        if not isinstance(txt, dict):
+            txt = {}
+        model = txt.get("md") or txt.get("model") or best_name
+        friendly = txt.get("fn") or txt.get("name")
+        model = model.strip() if isinstance(model, str) and model.strip() else None
+        friendly = friendly.strip() if isinstance(friendly, str) and friendly.strip() else None
+        return model, friendly
+
     def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
         if not props:
             return {}
@@ -339,12 +349,22 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         # Update last-known mDNS identity/type signals on the Device.
         if mdns:
             best_name = mdns.get("best_name")
+            txt = mdns.get("txt") if isinstance(mdns.get("txt"), dict) else {}
+            model_name, friendly_name = _mdns_device_and_friendly(txt, best_name if isinstance(best_name, str) else None)
             if isinstance(best_name, str) and best_name:
                 if not device.mdns_name:
                     device.mdns_name = best_name
-                # Also seed display_name if empty (optional but convenient).
-                if not device.display_name:
-                    device.display_name = best_name
+
+            if model_name and not device.device_name:
+                device.device_name = model_name
+
+            if friendly_name and not device.friendly_name:
+                device.friendly_name = friendly_name
+
+            # Keep display_name synced to best available signal (friendly > model > mdns best).
+            preferred_display = friendly_name or model_name or (best_name if isinstance(best_name, str) else None)
+            if preferred_display:
+                device.display_name = preferred_display
 
             stypes = mdns.get("service_types")
             if isinstance(stypes, list):
@@ -506,6 +526,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     "id": d.id,
                     "mac": d.mac,
                     "vendor": d.vendor,
+                    "device_name": d.device_name,
+                    "friendly_name": d.friendly_name,
                     "display_name": d.display_name,
                     "mdns_name": d.mdns_name,
                     "mdns_service_types": d.mdns_service_types,
@@ -536,6 +558,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "id": d.id,
             "mac": d.mac,
             "vendor": d.vendor,
+            "device_name": d.device_name,
+            "friendly_name": d.friendly_name,
             "display_name": d.display_name,
             "mdns_name": d.mdns_name,
             "mdns_service_types": d.mdns_service_types,
