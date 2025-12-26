@@ -111,14 +111,24 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             return None
         return mac.upper()
 
+    def _normalize_str(val: str | None) -> str | None:
+        if not isinstance(val, str):
+            return None
+        s = val.strip()
+        if not s:
+            return None
+        # Normalize curly apostrophes to ASCII for consistency.
+        s = s.replace("\u2019", "'").replace("\u2018", "'")
+        return s
+
     def _mdns_device_and_friendly(txt: dict[str, str] | None, best_name: str | None) -> tuple[str | None, str | None]:
         """Derive model-like and friendly names from TXT/best_name."""
         if not isinstance(txt, dict):
             txt = {}
         model = txt.get("md") or txt.get("model") or best_name
         friendly = txt.get("fn") or txt.get("name")
-        model = model.strip() if isinstance(model, str) and model.strip() else None
-        friendly = friendly.strip() if isinstance(friendly, str) and friendly.strip() else None
+        model = _normalize_str(model)
+        friendly = _normalize_str(friendly)
         return model, friendly
 
     def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
@@ -320,6 +330,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             rec["best_name"] = best
 
         return results
+    # Expose for testing/monkeypatching.
+    sys.modules[__name__].collect_mdns_signals = collect_mdns_signals
 
     # update/insert device info into inventory
     def upsert_device_and_observation(
@@ -412,7 +424,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
             db = SessionLocal()
             try:
-                mdns_by_ip = collect_mdns_signals(timeout_seconds=6) if settings.enable_mdns else {}
+                if settings.enable_mdns:
+                    # Allow monkeypatching via module attribute in tests.
+                    collect_fn = getattr(sys.modules[__name__], "collect_mdns_signals", collect_mdns_signals)
+                    mdns_by_ip = collect_fn(timeout_seconds=6)
+                else:
+                    mdns_by_ip = {}
                 _write_debug_json(f"{scan_tag}-mdns.json", mdns_by_ip)
 
                 scan_summary = {
