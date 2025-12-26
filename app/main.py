@@ -8,6 +8,8 @@ import os
 import sys
 import re
 from datetime import datetime
+import json
+import pathlib
 
 from .db import make_engine, make_sessionmaker, Base
 from .models import Device, Observation
@@ -56,6 +58,29 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             yield db
         finally:
             db.close()
+
+    def _debug_enabled() -> bool:
+        return bool(getattr(settings, "enable_debug_logs", False))
+
+    def _debug_path() -> pathlib.Path:
+        return pathlib.Path(getattr(settings, "debug_dir", "/data/debug"))
+
+    def _write_debug_text(filename: str, text: str) -> None:
+        if not _debug_enabled():
+            return
+        d = _debug_path()
+        d.mkdir(parents=True, exist_ok=True)
+        (d / filename).write_text(text, encoding="utf-8")
+
+    def _write_debug_json(filename: str, payload: object) -> None:
+        if not _debug_enabled():
+            return
+        d = _debug_path()
+        d.mkdir(parents=True, exist_ok=True)
+        (d / filename).write_text(
+            json.dumps(payload, indent=2, sort_keys=True, default=str),
+            encoding="utf-8",
+        )
 
     def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
         if not props:
@@ -331,11 +356,29 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             app.state.scan_state["last_error"] = None
             app.state.scan_state["last_started"] = time.time()
 
+            scan_tag = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
             db = SessionLocal()
             try:
                 mdns_by_ip = collect_mdns_signals(timeout_seconds=6) if settings.enable_mdns else {}
+                _write_debug_json(f"{scan_tag}-mdns.json", mdns_by_ip)
+
+                scan_summary = {"cidrs": settings.cidr_list(), "nmap_hosts": {}, "devices_upserted": 0}
                 for cidr in settings.cidr_list():
                     hosts = run_nmap_discovery(cidr)
+
+                    # Debug: write the parsed nmap results (hosts list). Raw nmap XML is not available here
+                    # without enhancing `scanner.py` to return stdout; this still helps diagnose "missing" devices.
+                    safe_cidr = cidr.replace("/", "_").replace(":", "-")
+                    _write_debug_json(
+                        f"{scan_tag}-nmap-{safe_cidr}.json",
+                        [
+                            {"ip": h.ip, "hostname": h.hostname, "mac": h.mac, "vendor": h.vendor}
+                            for h in hosts
+                        ],
+                    )
+                    scan_summary["nmap_hosts"][cidr] = len(hosts)
+
                     for h in hosts:
                         upsert_device_and_observation(
                             db,
@@ -345,13 +388,16 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                             h.vendor,
                             mdns=mdns_by_ip.get(h.ip),
                         )
+                        scan_summary["devices_upserted"] += 1
                 db.commit()
+                _write_debug_json(f"{scan_tag}-summary.json", scan_summary)
             finally:
                 db.close()
 
             app.state.scan_state["last_finished"] = time.time()
         except Exception as e:
             app.state.scan_state["last_error"] = str(e)
+            _write_debug_text(f"{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}-error.txt", str(e))
         finally:
             app.state.scan_state["running"] = False
             app.state.scan_lock.release()

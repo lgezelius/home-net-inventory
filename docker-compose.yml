@@ -20,6 +20,10 @@ services:
       # Enable multicast DNS (mDNS) scanning
       - ENABLE_MDNS=true
 
+      # Enable debug logging
+      - ENABLE_DEBUG_LOGS=true
+      - DEBUG_DIR=/data/debug
+
       # NOTE:
       # - Background scanner runs automatically
       # - /scan?sync=1 is for testing/debug only
@@ -27,5 +31,6 @@ services:
 
     volumes:
       - ./data:/data
+      - ./debug:/data/debug
 
     restart: unless-stopped

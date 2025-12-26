@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     scan_interval_seconds: int = Field(default=1800, alias="INVENTORY_SCAN_INTERVAL_SECONDS")
     nmap_args: str = Field(default="-sn", alias="INVENTORY_NMAP_ARGS")
     enable_mdns: bool = True
+    enable_debug_logs: bool = False
+    debug_dir: str = "/data/debug"
 
     def cidr_list(self) -> list[str]:
         return [c.strip() for c in self.scan_cidrs.split(",") if c.strip()]
