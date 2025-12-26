@@ -217,13 +217,42 @@ def test_display_name_updates_when_friendly_name_arrives(monkeypatch, client):
     assert r1.status_code == 200
     device1 = client.get("/devices").json()[0]
     assert device1["display_name"] == "Google Home Mini"
-    assert device1["friendly_name"] is None
+    assert device1["friendly_name"] == "Google Home Mini"
 
     r2 = client.post("/scan?sync=1")
     assert r2.status_code == 200
     device2 = client.get("/devices").json()[0]
     assert device2["display_name"] == "Dawn's Study Speaker"
     assert device2["friendly_name"] == "Dawn's Study Speaker"
+
+
+def test_friendly_falls_back_to_best_name_when_fn_missing(monkeypatch, client):
+    def fake_run_nmap_discovery(cidr: str):
+        return [
+            ScanHost(ip="192.168.1.173", hostname="Eisvogel-Laptop.lan", mac="7E:53:46:09:C7:AE", vendor=None),
+        ]
+
+    mdns_signals = {
+        "192.168.1.173": {
+            "hostname": "Eisvogel-Laptop",
+            "service_types": ["_airplay._tcp.local."],
+            "instances": ["Eisvogel Laptop._airplay._tcp.local."],
+            "txt": {"md": "0,1,2", "model": "Mac14,2"},
+            "best_name": "Eisvogel-Laptop",
+        }
+    }
+
+    monkeypatch.setattr("app.main.run_nmap_discovery", fake_run_nmap_discovery)
+    monkeypatch.setattr("app.main.collect_mdns_signals", lambda timeout_seconds=6: mdns_signals)
+    client.app.state.background_scanner_enabled = False
+
+    r = client.post("/scan?sync=1")
+    assert r.status_code == 200
+
+    device = client.get("/devices").json()[0]
+    assert device["device_name"] == "Mac14,2"  # uses model when md is junk
+    assert device["friendly_name"] == "Eisvogel-Laptop"  # falls back to best_name
+    assert device["display_name"] == "Eisvogel-Laptop"
 
 
 def test_mdns_srv_records_are_persisted(monkeypatch, client):

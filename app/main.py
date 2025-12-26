@@ -122,13 +122,22 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         return s
 
     def _mdns_device_and_friendly(txt: dict[str, str] | None, best_name: str | None) -> tuple[str | None, str | None]:
-        """Derive model-like and friendly names from TXT/best_name."""
+        """Derive model-like (device_name) and friendly names from TXT/best_name."""
         if not isinstance(txt, dict):
             txt = {}
-        model = txt.get("md") or txt.get("model") or best_name
-        friendly = txt.get("fn") or txt.get("name")
-        model = _normalize_str(model)
-        friendly = _normalize_str(friendly)
+
+        def _pick(candidates: list[str | None]) -> str | None:
+            for c in candidates:
+                s = _normalize_str(c)
+                if s:
+                    # Skip obviously placeholder numeric blobs (e.g., "0,1,2")
+                    if all(ch in "0123456789, " for ch in s):
+                        continue
+                    return s
+            return None
+
+        model = _pick([txt.get("model"), txt.get("md"), best_name])
+        friendly = _pick([txt.get("fn"), txt.get("name"), best_name])
         return model, friendly
 
     def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
@@ -417,8 +426,10 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             if model_name and not device.device_name:
                 device.device_name = model_name
 
-            if friendly_name and not device.friendly_name:
-                device.friendly_name = friendly_name
+            if friendly_name:
+                # Allow updates when a friendly name becomes available later.
+                if device.friendly_name != friendly_name:
+                    device.friendly_name = friendly_name
 
             # Keep display_name synced to best available signal (friendly > model > mdns best).
             preferred_display = friendly_name or model_name or (best_name if isinstance(best_name, str) else None)
