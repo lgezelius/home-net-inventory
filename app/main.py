@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, Query, Depends
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import select, desc
@@ -39,6 +41,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         yield
 
     app = FastAPI(title="Home Net Inventory", lifespan=lifespan)
+    templates = Jinja2Templates(directory="templates")
 
     resolved_url = db_url or settings.resolved_db_url()
     engine = make_engine(resolved_url)
@@ -140,6 +143,37 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         friendly = _pick([txt.get("fn"), txt.get("name"), best_name])
         return model, friendly
 
+    def _serialize_devices(db: Session, limit: int = 200) -> list[dict[str, object]]:
+        devices = db.scalars(select(Device).order_by(desc(Device.last_seen)).limit(limit)).all()
+        out = []
+        for d in devices:
+            last_obs = db.scalar(
+                select(Observation)
+                .where(Observation.device_id == d.id)
+                .order_by(desc(Observation.seen_at))
+                .limit(1)
+            )
+            out.append(
+                {
+                    "id": d.id,
+                    "mac": d.mac,
+                    "vendor": d.vendor,
+                    "device_name": d.device_name,
+                    "friendly_name": d.friendly_name,
+                    "display_name": d.display_name,
+                    "mdns_name": d.mdns_name,
+                    "mdns_srv": d.mdns_srv,
+                    "mdns_service_types": d.mdns_service_types,
+                    "mdns_instances": d.mdns_instances,
+                    "mdns_txt": d.mdns_txt,
+                    "first_seen": _dt_iso(d.first_seen),
+                    "last_seen": _dt_iso(d.last_seen),
+                    "last_ip": last_obs.ip if last_obs else None,
+                    "last_hostname": last_obs.hostname if last_obs else None,
+                }
+            )
+        return out
+
     def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
         if not props:
             return {}
@@ -192,6 +226,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "._companion-link._tcp.local",
             "._rdlink._tcp.local",
             "._remotepairing._tcp.local",
+            "._rfb._tcp.local",
         ):
             if s.lower().endswith(suffix):
                 s = s[: -len(suffix)]
@@ -608,35 +643,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
     @app.get("/devices")
     def list_devices(db: Session = Depends(get_db), limit: int = 200):
-        devices = db.scalars(select(Device).order_by(desc(Device.last_seen)).limit(limit)).all()
-        out = []
-        for d in devices:
-            last_obs = db.scalar(
-                select(Observation)
-                .where(Observation.device_id == d.id)
-                .order_by(desc(Observation.seen_at))
-                .limit(1)
-            )
-            out.append(
-                {
-                    "id": d.id,
-                    "mac": d.mac,
-                    "vendor": d.vendor,
-                    "device_name": d.device_name,
-                    "friendly_name": d.friendly_name,
-                    "display_name": d.display_name,
-                    "mdns_name": d.mdns_name,
-                    "mdns_srv": d.mdns_srv,
-                    "mdns_service_types": d.mdns_service_types,
-                    "mdns_instances": d.mdns_instances,
-                    "mdns_txt": d.mdns_txt,
-                    "first_seen": _dt_iso(d.first_seen),
-                    "last_seen": _dt_iso(d.last_seen),
-                    "last_ip": last_obs.ip if last_obs else None,
-                    "last_hostname": last_obs.hostname if last_obs else None,
-                }
-            )
-        return out
+        return _serialize_devices(db, limit=limit)
 
     @app.get("/devices/{device_id}")
     def device_detail(device_id: int, db: Session = Depends(get_db)):
@@ -667,6 +674,20 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "last_seen": _dt_iso(d.last_seen),
             "observations": [{"seen_at": _dt_iso(o.seen_at), "ip": o.ip, "hostname": o.hostname} for o in obs],
         }
+
+    @app.get("/ui/devices", response_class=HTMLResponse)
+    def ui_devices(request: Request, db: Session = Depends(get_db), limit: int = 200, partial: bool = False):
+        devices = _serialize_devices(db, limit=limit)
+        template_name = "devices_table.html" if partial else "devices.html"
+        return templates.TemplateResponse(
+            template_name,
+            {
+                "request": request,
+                "devices": devices,
+                "limit": limit,
+                "title": "Devices",
+            },
+        )
 
     return app
 

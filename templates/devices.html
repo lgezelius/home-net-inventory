@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
+    <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+      <div>
+        <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Home Net Inventory</p>
+        <h1 class="text-2xl font-semibold text-slate-50">Devices</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          class="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 hover:border-slate-500 hover:bg-slate-700"
+          hx-get="/ui/devices?partial=1&limit={{ limit }}"
+          hx-target="#devices-table"
+          hx-swap="outerHTML"
+        >
+          ↻ Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-4 py-6">
+    <section class="rounded-xl border border-slate-800 bg-slate-900/70 shadow-xl">
+      {% include "devices_table.html" %}
+    </section>
+  </main>
+</body>
+</html>

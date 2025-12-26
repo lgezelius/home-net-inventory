@@ -16,6 +16,7 @@ Create a virtual environment named .venv.
     source .venv/bin/activate
     pip install -U pip
     pip install -e .
+    pip install jinja2
 
 Confirm that the bottom status bar shows that the virtual environment with the correct version is displayed when editing a Python file.
 
