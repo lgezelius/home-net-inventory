@@ -78,4 +78,4 @@ Review results:
 
     curl -s http://localhost:8000/devices | jq 'length'
 
-     curl -s http://localhost:8000/devices | jq -r '.[] | "\(.last_ip // "-")\t\(.mac // "-")\t\(.vendor // "-")\t\(.last_hostname // "-")"' | sort -V
+    curl -s http://localhost:8000/devices | jq -r '.[] | "\(.last_ip // "-")\t\(.mac // "-")\t\(.vendor // "-")\t\(.last_hostname // "-")"' | sort -V
