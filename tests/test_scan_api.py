@@ -67,22 +67,23 @@ def test_last_seen_updates_on_rescan(monkeypatch, client):
     # Ensure sync scans are allowed
     client.app.state.background_scanner_enabled = False
 
-    # Patch datetime.utcnow() used in app.main so we don't need to sleep.
+    # Patch datetime.now(timezone.utc) used in app.main so we don't need to sleep.
     class _FakeDateTime:
-        _times = [
-            __import__("datetime").datetime(2025, 1, 1, 0, 0, 0),
-            __import__("datetime").datetime(2025, 1, 1, 0, 0, 2),
-        ]
+        _base = __import__("datetime").datetime(2025, 1, 1, 0, 0, 0)
 
         @classmethod
-        def utcnow(cls):
-            # Return the next time, but don't crash if called more than expected.
-            # Initialize _last on the first call.
-            if not hasattr(cls, "_last"):
-                cls._last = cls._times[0]
-            if cls._times:
-                cls._last = cls._times.pop(0)
-            return cls._last
+        def now(cls, tz=None):
+            dt_mod = __import__("datetime")
+            if not hasattr(cls, "_current"):
+                cls._current = cls._base
+            else:
+                cls._current = cls._current + dt_mod.timedelta(seconds=1)
+
+            dt = cls._current
+            # Match datetime.now(tz=...) semantics.
+            if tz is not None and getattr(dt, "tzinfo", None) is None:
+                dt = dt.replace(tzinfo=tz)
+            return dt
 
     monkeypatch.setattr(main, "datetime", _FakeDateTime)
 

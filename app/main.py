@@ -7,7 +7,7 @@ import time
 import os
 import sys
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import pathlib
 
@@ -72,6 +72,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         d.mkdir(parents=True, exist_ok=True)
         (d / filename).write_text(text, encoding="utf-8")
 
+
     def _write_debug_json(filename: str, payload: object) -> None:
         if not _debug_enabled():
             return
@@ -81,6 +82,20 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             json.dumps(payload, indent=2, sort_keys=True, default=str),
             encoding="utf-8",
         )
+
+    def _utcnow() -> datetime:
+        # Always generate UTC-aware timestamps (UTC+0)
+        return datetime.now(timezone.utc)
+
+    def _dt_iso(dt: datetime | None) -> str | None:
+        # Human-readable ISO-8601 with explicit UTC offset.
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            # Since you plan to recreate the DB, we don't aim for legacy support,
+            # but normalize defensively in case SQLite returns naive datetimes.
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
 
     def _decode_txt(props: dict[bytes, bytes] | None) -> dict[str, str]:
         if not props:
@@ -297,7 +312,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             device = db.scalar(select(Device).where(Device.mac == mac))
 
         if device is None:
-            device = Device(mac=mac, vendor=vendor)
+            now = _utcnow()
+            device = Device(mac=mac, vendor=vendor, first_seen=now, last_seen=now)
             db.add(device)
             db.flush()
 
@@ -336,13 +352,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 device.mdns_txt = current
 
         # Use one timestamp for both the observation and the device so they stay consistent.
-        now = datetime.utcnow()
+        now = _utcnow()
 
         obs = Observation(device_id=device.id, ip=ip, hostname=hostname, seen_at=now)
         db.add(obs)
 
         # Ensure Device.last_seen advances whenever we record a new observation.
-        # Adding an Observation alone does not UPDATE the Device row.
         device.last_seen = now
 
         return device
@@ -354,9 +369,9 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         try:
             app.state.scan_state["running"] = True
             app.state.scan_state["last_error"] = None
-            app.state.scan_state["last_started"] = time.time()
+            app.state.scan_state["last_started"] = _utcnow()
 
-            scan_tag = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            scan_tag = _utcnow().strftime("%Y%m%d-%H%M%S")
 
             db = SessionLocal()
             try:
@@ -394,10 +409,10 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             finally:
                 db.close()
 
-            app.state.scan_state["last_finished"] = time.time()
+            app.state.scan_state["last_finished"] = _utcnow()
         except Exception as e:
             app.state.scan_state["last_error"] = str(e)
-            _write_debug_text(f"{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}-error.txt", str(e))
+            _write_debug_text(f"{_utcnow().strftime('%Y%m%d-%H%M%S')}-error.txt", str(e))
         finally:
             app.state.scan_state["running"] = False
             app.state.scan_lock.release()
@@ -423,7 +438,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
     @app.get("/scan/status")
     def scan_status():
-        return app.state.scan_state
+        st = app.state.scan_state
+        return {
+            "running": st["running"],
+            "last_started": _dt_iso(st["last_started"]),
+            "last_finished": _dt_iso(st["last_finished"]),
+            "last_error": st["last_error"],
+        }
 
     @app.get("/devices")
     def list_devices(db: Session = Depends(get_db), limit: int = 200):
@@ -446,8 +467,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     "mdns_service_types": d.mdns_service_types,
                     "mdns_instances": d.mdns_instances,
                     "mdns_txt": d.mdns_txt,
-                    "first_seen": str(d.first_seen),
-                    "last_seen": str(d.last_seen),
+                    "first_seen": _dt_iso(d.first_seen),
+                    "last_seen": _dt_iso(d.last_seen),
                     "last_ip": last_obs.ip if last_obs else None,
                     "last_hostname": last_obs.hostname if last_obs else None,
                 }
@@ -476,9 +497,9 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "mdns_service_types": d.mdns_service_types,
             "mdns_instances": d.mdns_instances,
             "mdns_txt": d.mdns_txt,
-            "first_seen": str(d.first_seen),
-            "last_seen": str(d.last_seen),
-            "observations": [{"seen_at": str(o.seen_at), "ip": o.ip, "hostname": o.hostname} for o in obs],
+            "first_seen": _dt_iso(d.first_seen),
+            "last_seen": _dt_iso(d.last_seen),
+            "observations": [{"seen_at": _dt_iso(o.seen_at), "ip": o.ip, "hostname": o.hostname} for o in obs],
         }
 
     return app
