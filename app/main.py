@@ -310,14 +310,15 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                         current[k] = v
                 device.mdns_txt = current
 
-        obs = Observation(device_id=device.id, ip=ip, hostname=hostname)
+        # Use one timestamp for both the observation and the device so they stay consistent.
+        now = datetime.utcnow()
+
+        obs = Observation(device_id=device.id, ip=ip, hostname=hostname, seen_at=now)
         db.add(obs)
 
         # Ensure Device.last_seen advances whenever we record a new observation.
-        # Adding an Observation alone does not UPDATE the Device row, so SQLAlchemy's
-        # `onupdate=func.now()` won't fire unless we touch the Device.
-        # Use naive UTC timestamps; SQLite DateTime columns are typically naive.
-        device.last_seen = datetime.utcnow()
+        # Adding an Observation alone does not UPDATE the Device row.
+        device.last_seen = now
 
         return device
 
