@@ -20,6 +20,7 @@ class Device(Base):
     mdns_service_types: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     mdns_instances: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     mdns_txt: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
+    mdns_srv: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)  # SRV targets/ports per instance
 
     observations: Mapped[list["Observation"]] = relationship(back_populates="device", cascade="all, delete-orphan")
 

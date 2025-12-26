@@ -67,6 +67,14 @@ Response:
     "friendly_name": "Living Room Apple TV",
     "display_name": "Living Room Apple TV",
     "mdns_name": "Apple TV",
+    "mdns_srv": [
+      {
+        "instance": "Apple-TV-1234._airplay._tcp.local.",
+        "service_type": "_airplay._tcp.local.",
+        "target": "apple-tv.local",
+        "port": 7000
+      }
+    ],
     "mdns_service_types": ["_airplay._tcp.local."],
     "mdns_instances": ["Apple-TV-1234._airplay._tcp.local."],
     "mdns_txt": {"model": "AppleTV6,2"},
@@ -107,6 +115,14 @@ Response:
   "friendly_name": "Living Room Apple TV",
   "display_name": "Living Room Apple TV",
   "mdns_name": "Apple TV",
+  "mdns_srv": [
+    {
+      "instance": "Apple-TV-1234._airplay._tcp.local.",
+      "service_type": "_airplay._tcp.local.",
+      "target": "apple-tv.local",
+      "port": 7000
+    }
+  ],
   "mdns_service_types": ["_airplay._tcp.local."],
   "mdns_instances": ["Apple-TV-1234._airplay._tcp.local."],
   "mdns_txt": {"model": "AppleTV6,2"},

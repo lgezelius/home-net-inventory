@@ -230,11 +230,16 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     def collect_mdns_signals(timeout_seconds: int = 6) -> dict[str, dict[str, object]]:
         """Collect best-effort mDNS identity/type signals.
 
-        Returns a mapping: ip -> {"hostname": str|None, "service_types": list[str], "instances": list[str], "txt": dict[str,str]}
+        Returns a mapping: ip -> {
+            "hostname": str|None,
+            "service_types": list[str],
+            "instances": list[str],
+            "srv": list[dict],           # SRV target/port per instance
+            "txt": dict[str,str],
+        }
         """
 
-        # High-signal service types for identification on typical home networks.
-        service_types = [
+        base_service_types = [
             "_googlecast._tcp.local.",
             "_hap._tcp.local.",
             "_airplay._tcp.local.",
@@ -248,15 +253,35 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "_printer._tcp.local.",
             "_ipp._tcp.local.",
             "_ipps._tcp.local.",
+            "_http._tcp.local.",
+            "_https._tcp.local.",
+            "_device-info._tcp.local.",
+            "_spotify-connect._tcp.local.",
+            "_sonos._tcp.local.",
+            "_daap._tcp.local.",
+            "_dlna._tcp.local.",
+            "_smb._tcp.local.",
         ]
 
         zc = Zeroconf()
         results: dict[str, dict[str, object]] = {}
+        discovered_types: set[str] = set()
 
         def upsert_ip(ip: str) -> dict[str, object]:
             if ip not in results:
-                results[ip] = {"hostname": None, "service_types": [], "instances": [], "txt": {}}
+                results[ip] = {"hostname": None, "service_types": [], "instances": [], "srv": [], "txt": {}}
             return results[ip]
+
+        class _ServiceTypeListener:
+            def add_service(self, zc_obj, stype: str, name: str):
+                if name:
+                    discovered_types.add(name)
+
+            def remove_service(self, zc_obj, service_type: str, name: str):
+                return
+
+            def update_service(self, zc_obj, service_type: str, name: str):
+                return
 
         class Listener:
             def add_service(self, zc_obj, service_type: str, name: str):
@@ -264,7 +289,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 if not info:
                     return
 
-                # Prefer IPv4; keep IPv6-host-only data out for now.
+                # Prefer IPv4 for device association; capture target/port for identity.
                 ips: list[str] = []
                 try:
                     for addr in info.addresses or []:
@@ -278,6 +303,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
                 hostname = _server_to_hostname(getattr(info, "server", None))
                 txt = _filter_mdns_txt(_decode_txt(getattr(info, "properties", None)))
+                target = _server_to_hostname(getattr(info, "server", None))
+                port = getattr(info, "port", None)
 
                 for ip in ips:
                     rec = upsert_ip(ip)
@@ -295,6 +322,18 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     if isinstance(inst, list) and name not in inst:
                         inst.append(name)
 
+                    # Merge SRV targets/ports
+                    srv_list = rec.get("srv")
+                    if isinstance(srv_list, list):
+                        entry = {
+                            "instance": name,
+                            "service_type": service_type,
+                            "target": target,
+                            "port": port,
+                        }
+                        if entry not in srv_list:
+                            srv_list.append(entry)
+
                     # Merge TXT (prefer existing keys; fill missing)
                     t = rec.get("txt")
                     if isinstance(t, dict) and txt:
@@ -311,6 +350,14 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         listeners = []
         browsers = []
         try:
+            # Discover additional service types first.
+            type_listener = _ServiceTypeListener()
+            browsers.append(ServiceBrowser(zc, "_services._dns-sd._udp.local.", type_listener))
+            time.sleep(min(2, timeout_seconds))
+
+            # Union base + discovered types (deduped).
+            service_types = sorted(set(base_service_types).union(discovered_types))
+
             for stype in service_types:
                 l = Listener()
                 listeners.append(l)
@@ -398,6 +445,27 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     if k not in current and isinstance(v, str):
                         current[k] = v
                 device.mdns_txt = current
+
+            srv = mdns.get("srv")
+            if isinstance(srv, list):
+                existing = {(s.get("instance"), s.get("service_type"), s.get("target"), s.get("port")) for s in device.mdns_srv or []}
+                merged: list[dict[str, object]] = list(device.mdns_srv or [])
+                for s in srv:
+                    if not isinstance(s, dict):
+                        continue
+                    key = (s.get("instance"), s.get("service_type"), s.get("target"), s.get("port"))
+                    if key in existing:
+                        continue
+                    merged.append(
+                        {
+                            "instance": s.get("instance"),
+                            "service_type": s.get("service_type"),
+                            "target": s.get("target"),
+                            "port": s.get("port"),
+                        }
+                    )
+                    existing.add(key)
+                device.mdns_srv = merged
 
         # Use one timestamp for both the observation and the device so they stay consistent.
         now = _utcnow()
@@ -547,6 +615,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     "friendly_name": d.friendly_name,
                     "display_name": d.display_name,
                     "mdns_name": d.mdns_name,
+                    "mdns_srv": d.mdns_srv,
                     "mdns_service_types": d.mdns_service_types,
                     "mdns_instances": d.mdns_instances,
                     "mdns_txt": d.mdns_txt,
@@ -579,6 +648,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "friendly_name": d.friendly_name,
             "display_name": d.display_name,
             "mdns_name": d.mdns_name,
+            "mdns_srv": d.mdns_srv,
             "mdns_service_types": d.mdns_service_types,
             "mdns_instances": d.mdns_instances,
             "mdns_txt": d.mdns_txt,
