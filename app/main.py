@@ -666,6 +666,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     @app.get("/ui/devices", response_class=HTMLResponse)
     def ui_devices(request: Request, db: Session = Depends(get_db), limit: int | None = None, partial: bool = False):
         devices = _serialize_devices(db, limit=limit)
+        total_devices = db.scalar(select(func.count()).select_from(Device))
         st = app.state.scan_state
         scan_status = {
             "running": bool(st.get("running")),
@@ -680,6 +681,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 "request": request,
                 "devices": devices,
                 "limit": limit,
+                "count": len(devices),
+                "total": total_devices or 0,
                 "title": "Devices",
                 "scan_status": scan_status,
             },

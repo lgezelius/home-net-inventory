@@ -2,7 +2,11 @@
   <div class="flex items-center justify-between px-4 pt-4 pb-3">
     <div>
       <p class="text-sm text-slate-400">
-        {% if limit %}Showing up to {{ limit }} most recent devices.{% else %}Showing all devices.{% endif %}
+        {% if limit %}
+          Showing {{ count }} of {{ total }} devices (limit {{ limit }}).
+        {% else %}
+          Showing all {{ total }} devices.
+        {% endif %}
       </p>
     </div>
   </div>
