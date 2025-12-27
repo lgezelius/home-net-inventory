@@ -1,25 +1,27 @@
 <div id="devices-table" hx-target="this">
   <div class="flex items-center justify-between px-4 pt-4 pb-3">
     <div>
-      <p class="text-sm text-slate-400">Showing up to {{ limit }} most recent devices.</p>
+      <p class="text-sm text-slate-400">
+        {% if limit %}Showing up to {{ limit }} most recent devices.{% else %}Showing all devices.{% endif %}
+      </p>
     </div>
   </div>
-  <div class="overflow-x-auto">
-    <table class="min-w-full divide-y divide-slate-800">
+  <div class="max-h-[70vh] overflow-auto">
+    <table class="min-w-full divide-y divide-slate-800 table-fixed">
       <thead class="bg-slate-900/80">
         <tr class="text-left text-xs uppercase tracking-wide text-slate-400">
-          <th class="px-4 py-3">Name</th>
-          <th class="px-4 py-3">Device</th>
-          <th class="px-4 py-3">MAC</th>
-          <th class="px-4 py-3">IP</th>
-          <th class="px-4 py-3">Vendor</th>
-          <th class="px-4 py-3">Last seen</th>
-          <th class="px-4 py-3">Services</th>
+          <th class="px-4 py-3 w-48">Name</th>
+          <th class="px-4 py-3 w-40">Device</th>
+          <th class="px-4 py-3 w-40">MAC</th>
+          <th class="px-4 py-3 w-44">IP</th>
+          <th class="px-4 py-3 w-32">Vendor</th>
+          <th class="px-4 py-3 w-48">Last seen</th>
+          <th class="px-4 py-3 w-72">Services</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-800">
         {% for d in devices %}
-        {% set name = d.friendly_name or d.display_name or d.mdns_name or d.device_name or d.mac %}
+        {% set name = d.friendly_name or d.display_name or d.mdns_name or d.device_name or "-" %}
         <tr class="hover:bg-slate-800/50">
           <td class="px-4 py-3">
             <div class="text-sm font-semibold text-slate-50">{{ name }}</div>
@@ -41,11 +43,15 @@
             {% endif %}
           </td>
           <td class="px-4 py-3 text-sm text-slate-200">{{ d.vendor or "—" }}</td>
-          <td class="px-4 py-3 text-sm text-slate-200">{{ d.last_seen or "—" }}</td>
-          <td class="px-4 py-3">
-            <div class="flex flex-wrap gap-1">
+          <td class="px-4 py-3 text-sm text-slate-200">
+            {% if d.last_seen %}
+            <span data-dt="{{ d.last_seen }}">{{ d.last_seen }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-4 py-3 align-top">
+            <div class="flex flex-wrap gap-1 max-h-20 overflow-auto pr-1">
               {% for st in d.mdns_service_types or [] %}
-              <span class="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200">{{ st }}</span>
+              <span class="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200 whitespace-nowrap">{{ st }}</span>
               {% endfor %}
             </div>
           </td>
