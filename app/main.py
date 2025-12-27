@@ -463,8 +463,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 if device.friendly_name != friendly_name:
                     device.friendly_name = friendly_name
 
-            # Keep display_name synced to best available signal (friendly > model > mdns best).
-            preferred_display = friendly_name or model_name or (best_name if isinstance(best_name, str) else None)
+            # Keep display_name synced to best available signal (friendly > model > mdns best > hostname).
+            preferred_display = (
+                friendly_name
+                or model_name
+                or (best_name if isinstance(best_name, str) else None)
+                or (hostname if isinstance(hostname, str) and hostname else None)
+            )
             if preferred_display:
                 device.display_name = preferred_display
 
