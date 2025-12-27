@@ -143,8 +143,11 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         friendly = _pick([txt.get("fn"), txt.get("name"), best_name])
         return model, friendly
 
-    def _serialize_devices(db: Session, limit: int = 200) -> list[dict[str, object]]:
-        devices = db.scalars(select(Device).order_by(desc(Device.last_seen)).limit(limit)).all()
+    def _serialize_devices(db: Session, limit: int | None = None) -> list[dict[str, object]]:
+        query = select(Device).order_by(desc(Device.last_seen))
+        if limit and limit > 0:
+            query = query.limit(limit)
+        devices = db.scalars(query).all()
         out = []
         for d in devices:
             last_obs = db.scalar(
@@ -642,7 +645,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         }
 
     @app.get("/devices")
-    def list_devices(db: Session = Depends(get_db), limit: int = 200):
+    def list_devices(db: Session = Depends(get_db), limit: int | None = None):
         return _serialize_devices(db, limit=limit)
 
     @app.get("/devices/{device_id}")
@@ -676,7 +679,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         }
 
     @app.get("/ui/devices", response_class=HTMLResponse)
-    def ui_devices(request: Request, db: Session = Depends(get_db), limit: int = 200, partial: bool = False):
+    def ui_devices(request: Request, db: Session = Depends(get_db), limit: int | None = None, partial: bool = False):
         devices = _serialize_devices(db, limit=limit)
         template_name = "devices_table.html" if partial else "devices.html"
         return templates.TemplateResponse(
