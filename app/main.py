@@ -3,7 +3,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 import threading
 import time
 import os
@@ -472,7 +472,6 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             )
             if preferred_display:
                 device.display_name = preferred_display
-
             stypes = mdns.get("service_types")
             if isinstance(stypes, list):
                 existing = set(device.mdns_service_types or [])
@@ -514,6 +513,10 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     )
                     existing.add(key)
                 device.mdns_srv = merged
+        else:
+            # No mDNS data: fall back to hostname for display_name if empty.
+            if hostname and not device.display_name:
+                device.display_name = hostname
 
         # Use one timestamp so device fields stay consistent.
         now = _utcnow()
@@ -537,12 +540,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
             db = SessionLocal()
             try:
+                mdns_by_ip: dict[str, dict[str, object]] = {}
                 if settings.enable_mdns:
                     # Allow monkeypatching via module attribute in tests.
                     collect_fn = getattr(sys.modules[__name__], "collect_mdns_signals", collect_mdns_signals)
-                    mdns_by_ip = collect_fn(timeout_seconds=6)
-                else:
-                    mdns_by_ip = {}
+                    data = collect_fn(timeout_seconds=6)
+                    if isinstance(data, dict):
+                        mdns_by_ip = data
                 _write_debug_json(f"{scan_tag}-mdns.json", mdns_by_ip)
 
                 scan_summary = {
