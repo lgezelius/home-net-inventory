@@ -1,5 +1,28 @@
 #!/bin/bash
+set -euo pipefail
+
+RECREATE_DB=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --recreate-db)
+      RECREATE_DB=true
+      ;;
+    *)
+      echo "Usage: $0 [--recreate-db]"
+      exit 1
+      ;;
+  esac
+done
 
 git pull
+
+if [ "$RECREATE_DB" = true ]; then
+  echo "Recreating database..."
+  docker compose down || true
+  mkdir -p data
+  rm -f data/inventory.db
+fi
+
 docker compose up -d --build
 echo "Update complete!"
