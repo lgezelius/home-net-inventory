@@ -14,7 +14,7 @@ import json
 import pathlib
 
 from .db import make_engine, make_sessionmaker, Base
-from .models import Device, Observation
+from .models import Device
 from .config import settings
 from .scanner import run_nmap_discovery
 from zeroconf import Zeroconf, ServiceBrowser
@@ -150,17 +150,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         devices = db.scalars(query).all()
         out = []
         for d in devices:
-            last_obs = db.scalar(
-                select(Observation)
-                .where(Observation.device_id == d.id)
-                .order_by(desc(Observation.seen_at))
-                .limit(1)
-            )
             out.append(
                 {
                     "id": d.id,
                     "mac": d.mac,
                     "vendor": d.vendor,
+                    "ip": d.ip,
+                    "hostname": d.hostname,
                     "device_name": d.device_name,
                     "friendly_name": d.friendly_name,
                     "display_name": d.display_name,
@@ -171,8 +167,6 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     "mdns_txt": d.mdns_txt,
                     "first_seen": _dt_iso(d.first_seen),
                     "last_seen": _dt_iso(d.last_seen),
-                    "last_ip": last_obs.ip if last_obs else None,
-                    "last_hostname": last_obs.hostname if last_obs else None,
                 }
             )
         return out
@@ -516,14 +510,11 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     existing.add(key)
                 device.mdns_srv = merged
 
-        # Use one timestamp for both the observation and the device so they stay consistent.
+        # Use one timestamp so device fields stay consistent.
         now = _utcnow()
-
-        obs = Observation(device_id=device.id, ip=ip, hostname=hostname, seen_at=now)
-        db.add(obs)
-
-        # Ensure Device.last_seen advances whenever we record a new observation.
         device.last_seen = now
+        device.ip = ip
+        device.hostname = hostname
 
         return device
 
@@ -654,17 +645,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         if not d:
             raise HTTPException(status_code=404, detail="device not found")
 
-        obs = db.scalars(
-            select(Observation)
-            .where(Observation.device_id == device_id)
-            .order_by(desc(Observation.seen_at))
-            .limit(200)
-        ).all()
-
         return {
             "id": d.id,
             "mac": d.mac,
             "vendor": d.vendor,
+            "ip": d.ip,
+            "hostname": d.hostname,
             "device_name": d.device_name,
             "friendly_name": d.friendly_name,
             "display_name": d.display_name,
@@ -675,7 +661,6 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "mdns_txt": d.mdns_txt,
             "first_seen": _dt_iso(d.first_seen),
             "last_seen": _dt_iso(d.last_seen),
-            "observations": [{"seen_at": _dt_iso(o.seen_at), "ip": o.ip, "hostname": o.hostname} for o in obs],
         }
 
     @app.get("/ui/devices", response_class=HTMLResponse)

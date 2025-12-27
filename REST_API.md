@@ -78,10 +78,10 @@ Response:
     "mdns_service_types": ["_airplay._tcp.local."],
     "mdns_instances": ["Apple-TV-1234._airplay._tcp.local."],
     "mdns_txt": {"model": "AppleTV6,2"},
+    "ip": "192.168.1.20",
+    "hostname": "apple-tv.lan",
     "first_seen": "2025-12-23T21:10:03+00:00",
-    "last_seen": "2025-12-24T05:53:50+00:00",
-    "last_ip": "192.168.1.20",
-    "last_hostname": "apple-tv.lan"
+    "last_seen": "2025-12-24T05:53:50+00:00"
   }
 ]
 ```

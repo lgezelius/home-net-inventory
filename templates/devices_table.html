@@ -37,9 +37,9 @@
           </td>
           <td class="px-4 py-3 text-sm font-mono text-slate-200">{{ d.mac or "—" }}</td>
           <td class="px-4 py-3">
-            <div class="text-sm font-mono text-slate-200">{{ d.last_ip or "—" }}</div>
-            {% if d.last_hostname %}
-            <div class="text-xs text-slate-400">{{ d.last_hostname }}</div>
+            <div class="text-sm font-mono text-slate-200">{{ d.ip or "—" }}</div>
+            {% if d.hostname %}
+            <div class="text-xs text-slate-400">{{ d.hostname }}</div>
             {% endif %}
           </td>
           <td class="px-4 py-3 text-sm text-slate-200">{{ d.vendor or "—" }}</td>
