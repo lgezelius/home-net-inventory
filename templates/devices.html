@@ -14,7 +14,13 @@
         <p class="text-xs uppercase tracking-[0.2em] text-slate-400">Home Net Inventory</p>
         <h1 class="text-2xl font-semibold text-slate-50">Devices</h1>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
+        {% if scan_status and scan_status.running %}
+        <span class="inline-flex items-center gap-2 rounded-md bg-emerald-900/50 border border-emerald-600 px-3 py-1 text-sm text-emerald-100">
+          <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Scan running
+        </span>
+        {% endif %}
         <button
           class="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 hover:border-slate-500 hover:bg-slate-700"
           hx-get="/ui/devices?partial=1&limit={{ limit }}"

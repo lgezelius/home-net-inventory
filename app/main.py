@@ -666,6 +666,13 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     @app.get("/ui/devices", response_class=HTMLResponse)
     def ui_devices(request: Request, db: Session = Depends(get_db), limit: int | None = None, partial: bool = False):
         devices = _serialize_devices(db, limit=limit)
+        st = app.state.scan_state
+        scan_status = {
+            "running": bool(st.get("running")),
+            "last_started": _dt_iso(st.get("last_started")),
+            "last_finished": _dt_iso(st.get("last_finished")),
+            "last_error": st.get("last_error"),
+        }
         template_name = "devices_table.html" if partial else "devices.html"
         return templates.TemplateResponse(
             template_name,
@@ -674,6 +681,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 "devices": devices,
                 "limit": limit,
                 "title": "Devices",
+                "scan_status": scan_status,
             },
         )
 

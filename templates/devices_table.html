@@ -59,7 +59,11 @@
         {% if devices|length == 0 %}
         <tr>
           <td colspan="7" class="px-4 py-6 text-center text-slate-400 text-sm">
-            No devices yet. Run a scan to populate inventory.
+            {% if scan_status and scan_status.running %}
+              Scan is running. Devices will appear when it finishes.
+            {% else %}
+              No devices yet. Run a scan to populate inventory.
+            {% endif %}
           </td>
         </tr>
         {% endif %}
