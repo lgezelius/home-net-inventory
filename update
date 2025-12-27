@@ -18,6 +18,12 @@ done
 git pull
 
 if [ "$RECREATE_DB" = true ]; then
+  echo "Recreating database will DELETE the existing data/inventory.db."
+  read -r -p "Are you sure you want to continue? [y/N] " reply
+  case "$reply" in
+    [yY][eE][sS]|[yY]) ;;
+    *) echo "Aborting."; exit 1 ;;
+  esac
   echo "Recreating database..."
   docker compose down || true
   mkdir -p data
