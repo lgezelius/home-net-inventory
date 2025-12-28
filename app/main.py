@@ -172,6 +172,36 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             return None
         return None
 
+    def _try_googlecast_info(ip: str, srv_list: list[dict[str, object]] | None) -> dict[str, object] | None:
+        # Try default port and any discovered cast ports.
+        seen_ports: set[int] = set()
+        for port in (8008, 8443):
+            seen_ports.add(port)
+            info = _fetch_googlecast_info(ip, port=port)
+            if info:
+                return info
+        if srv_list:
+            for s in srv_list:
+                if not isinstance(s, dict):
+                    continue
+                stype = s.get("service_type")
+                if not (isinstance(stype, str) and "_googlecast._tcp" in stype):
+                    continue
+                port = s.get("port")
+                tgt = s.get("target") or ip
+                try:
+                    port_int = int(port) if port is not None else None
+                except Exception:
+                    port_int = None
+                if port_int and port_int in seen_ports:
+                    continue
+                if port_int:
+                    seen_ports.add(port_int)
+                info = _fetch_googlecast_info(str(tgt), port=port_int)
+                if info:
+                    return info
+        return None
+
     def _fetch_googlecast_info(ip: str, port: int | None = None) -> dict[str, object] | None:
         url = f"http://{ip}:{port or 8008}/setup/eureka_info?options=detail"
         try:
@@ -589,7 +619,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     has_cast = True
                     break
             if has_cast:
-                info = _fetch_googlecast_info(ip)
+                info = _try_googlecast_info(ip, device.mdns_srv)
                 if info:
                     device.googlecast_info = info
 
