@@ -61,6 +61,18 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         "_sonos._tcp": "Sonos",
         "_dlna._tcp": "DLNA/UPnP",
         "_daap._tcp": "DAAP / iTunes",
+        "_googlezone._tcp": "Google Cast Audio Group",
+        "_googcrossdevice._tcp": "Google Cross-Device",
+        "_companion-link._tcp": "Apple Companion Link",
+        "_matter._tcp": "Matter (IP)",
+        "_smartthings-hedge._tcp": "SmartThings Hedge",
+        "_smartthings._tcp": "SmartThings",
+        "_asquic._udp": "Apple QUIC Service",
+        "_meshcop._udp": "Thread Mesh Commissioning",
+        "_srpl-tls._tcp": "Sleep Proxy (TLS)",
+        "_sleep-proxy._udp": "Sleep Proxy",
+        "_trel._udp": "Thread TREL",
+        "_orb._tcp": "Orb Sensor",
     }
 
     resolved_url = db_url or settings.resolved_db_url()
@@ -147,14 +159,16 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     def _fetch_googlecast_info(ip: str, port: int | None = None) -> dict[str, object] | None:
         url = f"http://{ip}:{port or 8008}/setup/eureka_info?options=detail"
         try:
-            r = httpx.get(url, timeout=2.0)
+            r = httpx.get(url, timeout=2.0, headers={"Accept": "application/json"})
             if r.status_code != 200:
+                _write_debug_text(f"cast-{ip}-error.txt", f"{url} returned {r.status_code}")
                 return None
             data = r.json()
             if isinstance(data, dict):
-                # Keep it small-ish
+                _write_debug_json(f"cast-{ip}-success.json", data)
                 return data
-        except Exception:
+        except Exception as e:
+            _write_debug_text(f"cast-{ip}-error.txt", f"{url} failed: {e}")
             return None
         return None
 
