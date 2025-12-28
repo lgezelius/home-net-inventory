@@ -124,6 +124,10 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             encoding="utf-8",
         )
 
+    def _cast_debug_name(ip: str, tag: str, ext: str = "txt") -> str:
+        ts = _utcnow().strftime("%Y%m%d-%H%M%S")
+        return f"{ts}-cast-{ip}-{tag}.{ext}"
+
     def _utcnow() -> datetime:
         # Always generate UTC-aware timestamps (UTC+0)
         return datetime.now(timezone.utc)
@@ -161,14 +165,19 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         try:
             r = httpx.get(url, timeout=2.0, headers={"Accept": "application/json"})
             if r.status_code != 200:
-                _write_debug_text(f"cast-{ip}-error.txt", f"{url} returned {r.status_code}")
+                _write_debug_text(_cast_debug_name(ip, "error"), f"{url} returned {r.status_code}")
                 return None
-            data = r.json()
+            try:
+                data = r.json()
+            except Exception as e:
+                _write_debug_text(_cast_debug_name(ip, "error"), f"{url} json error: {e}; body[:500]={r.text[:500]!r}")
+                return None
             if isinstance(data, dict):
-                _write_debug_json(f"cast-{ip}-success.json", data)
+                _write_debug_json(_cast_debug_name(ip, "success", "json"), data)
                 return data
+            _write_debug_text(_cast_debug_name(ip, "error"), f"{url} returned non-dict JSON")
         except Exception as e:
-            _write_debug_text(f"cast-{ip}-error.txt", f"{url} failed: {e}")
+            _write_debug_text(_cast_debug_name(ip, "error"), f"{url} failed: {e}")
             return None
         return None
 
@@ -177,7 +186,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         seen_ports: set[int] = set()
         for port in (8008, 8009, 8443):
             seen_ports.add(port)
-            _write_debug_text(f"cast-{ip}-attempt.txt", f"Trying {ip}:{port}")
+            _write_debug_text(_cast_debug_name(ip, "attempt"), f"Trying {ip}:{port}")
             info = _fetch_googlecast_info(ip, port=port)
             if info:
                 return info
@@ -198,7 +207,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     continue
                 if port_int:
                     seen_ports.add(port_int)
-                _write_debug_text(f"cast-{ip}-attempt.txt", f"Trying {tgt}:{port_int or '(default)'} via SRV")
+                _write_debug_text(_cast_debug_name(ip, "attempt"), f"Trying {tgt}:{port_int or '(default)'} via SRV")
                 info = _fetch_googlecast_info(str(tgt), port=port_int)
                 if info:
                     return info
@@ -621,12 +630,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     has_cast = True
                     break
             if has_cast:
-                _write_debug_text(f"cast-{ip}-attempt.txt", "Attempting Cast info fetch")
+                _write_debug_text(_cast_debug_name(ip, "attempt"), "Attempting Cast info fetch")
                 info = _try_googlecast_info(ip, device.mdns_srv)
                 if info:
                     device.googlecast_info = info
                 else:
-                    _write_debug_text(f"cast-{ip}-error.txt", "Cast fetch returned no data")
+                    _write_debug_text(_cast_debug_name(ip, "error"), "Cast fetch returned no data")
 
         # Use one timestamp so device fields stay consistent.
         now = _utcnow()
