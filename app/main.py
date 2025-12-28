@@ -173,10 +173,11 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         return None
 
     def _try_googlecast_info(ip: str, srv_list: list[dict[str, object]] | None) -> dict[str, object] | None:
-        # Try default port and any discovered cast ports.
+        # Try common ports and any discovered cast ports.
         seen_ports: set[int] = set()
-        for port in (8008, 8443):
+        for port in (8008, 8009, 8443):
             seen_ports.add(port)
+            _write_debug_text(f"cast-{ip}-attempt.txt", f"Trying {ip}:{port}")
             info = _fetch_googlecast_info(ip, port=port)
             if info:
                 return info
@@ -197,6 +198,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     continue
                 if port_int:
                     seen_ports.add(port_int)
+                _write_debug_text(f"cast-{ip}-attempt.txt", f"Trying {tgt}:{port_int or '(default)'} via SRV")
                 info = _fetch_googlecast_info(str(tgt), port=port_int)
                 if info:
                     return info
