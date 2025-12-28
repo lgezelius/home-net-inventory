@@ -19,8 +19,7 @@
           <th class="px-4 py-3 w-40">MAC</th>
           <th class="px-4 py-3 w-44">IP</th>
           <th class="px-4 py-3 w-32">Vendor</th>
-          <th class="px-4 py-3 w-48">Last seen</th>
-          <th class="px-4 py-3 w-72">Services</th>
+          <th class="px-4 py-3 w-[14rem]">Last seen</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-slate-800">
@@ -28,9 +27,14 @@
         <tr class="hover:bg-slate-800/50">
           <td class="px-4 py-3">
             <div class="text-sm font-semibold text-slate-50">{{ d.display_name or "—" }}</div>
-            {% if d.mdns_name and d.mdns_name != name %}
-            <div class="text-xs text-slate-400">mDNS: {{ d.mdns_name }}</div>
-            {% endif %}
+            <div class="mt-1 flex flex-wrap gap-1">
+              {% for st in d.mdns_service_types or [] %}
+              {% set key = st.replace('.local.', '').rstrip('.') %}
+              <span class="rounded-full bg-slate-800 px-2 py-1 text-[11px] text-slate-200 whitespace-nowrap">
+                {{ service_labels.get(key, st) }}
+              </span>
+              {% endfor %}
+            </div>
           </td>
           <td class="px-4 py-3">
             <div class="text-sm text-slate-100">{{ d.device_name or "—" }}</div>
@@ -51,21 +55,11 @@
             <span data-dt="{{ d.last_seen }}">{{ d.last_seen }}</span>
             {% else %}—{% endif %}
           </td>
-          <td class="px-4 py-3 align-top">
-            <div class="flex flex-wrap gap-1 max-h-20 overflow-auto pr-1">
-              {% for st in d.mdns_service_types or [] %}
-              {% set key = st.replace('.local.', '').rstrip('.') %}
-              <span class="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200 whitespace-nowrap">
-                {{ service_labels.get(key, st) }}
-              </span>
-              {% endfor %}
-            </div>
-          </td>
         </tr>
         {% endfor %}
         {% if devices|length == 0 %}
         <tr>
-          <td colspan="7" class="px-4 py-6 text-center text-slate-400 text-sm">
+          <td colspan="6" class="px-4 py-6 text-center text-slate-400 text-sm">
             {% if scan_status and scan_status.running %}
               Scan is running. Devices will appear when it finishes.
             {% else %}
