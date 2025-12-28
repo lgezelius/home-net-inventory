@@ -619,9 +619,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     has_cast = True
                     break
             if has_cast:
+                _write_debug_text(f"cast-{ip}-attempt.txt", "Attempting Cast info fetch")
                 info = _try_googlecast_info(ip, device.mdns_srv)
                 if info:
                     device.googlecast_info = info
+                else:
+                    _write_debug_text(f"cast-{ip}-error.txt", "Cast fetch returned no data")
 
         # Use one timestamp so device fields stay consistent.
         now = _utcnow()
