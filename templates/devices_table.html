@@ -54,7 +54,10 @@
           <td class="px-4 py-3 align-top">
             <div class="flex flex-wrap gap-1 max-h-20 overflow-auto pr-1">
               {% for st in d.mdns_service_types or [] %}
-              <span class="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200 whitespace-nowrap">{{ st }}</span>
+              {% set key = st.replace('.local.', '').rstrip('.') %}
+              <span class="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-200 whitespace-nowrap">
+                {{ service_labels.get(key, st) }}
+              </span>
               {% endfor %}
             </div>
           </td>

@@ -42,6 +42,26 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
 
     app = FastAPI(title="Home Net Inventory", lifespan=lifespan)
     templates = Jinja2Templates(directory="templates")
+    SERVICE_LABELS: dict[str, str] = {
+        "_googlecast._tcp": "Chromecast / Google Cast",
+        "_airplay._tcp": "AirPlay",
+        "_raop._tcp": "AirPlay Audio (RAOP)",
+        "_hap._tcp": "HomeKit / HAP",
+        "_androidtvremote2._tcp": "Android TV Remote",
+        "_rfb._tcp": "Screen Sharing (RFB)",
+        "_ssh._tcp": "SSH",
+        "_sftp-ssh._tcp": "SFTP",
+        "_workstation._tcp": "Workstation",
+        "_printer._tcp": "Printer",
+        "_ipp._tcp": "IPP Printer",
+        "_ipps._tcp": "IPP over TLS",
+        "_http._tcp": "HTTP",
+        "_https._tcp": "HTTPS",
+        "_spotify-connect._tcp": "Spotify Connect",
+        "_sonos._tcp": "Sonos",
+        "_dlna._tcp": "DLNA/UPnP",
+        "_daap._tcp": "DAAP / iTunes",
+    }
 
     resolved_url = db_url or settings.resolved_db_url()
     engine = make_engine(resolved_url)
@@ -736,6 +756,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 "total": total_devices or 0,
                 "title": "Devices",
                 "scan_status": scan_status,
+                "service_labels": SERVICE_LABELS,
             },
         )
 
