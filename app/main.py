@@ -175,7 +175,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
     def _fetch_googlecast_info(ip: str, port: int | None = None) -> dict[str, object] | None:
         url = f"http://{ip}:{port or 8008}/setup/eureka_info?options=detail"
         try:
-            r = httpx.get(url, timeout=2.0, headers={"Accept": "application/json"})
+            import httpx as _httpx  # local import to avoid module-level missing httpx issues
+            r = _httpx.get(url, timeout=2.0, headers={"Accept": "application/json"})
             if r.status_code != 200:
                 _append_debug_text(_cast_debug_name(ip, "error"), f"{url} returned {r.status_code}\n")
                 return None
