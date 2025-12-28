@@ -213,20 +213,6 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     return info
         return None
 
-    def _fetch_googlecast_info(ip: str, port: int | None = None) -> dict[str, object] | None:
-        url = f"http://{ip}:{port or 8008}/setup/eureka_info?options=detail"
-        try:
-            r = httpx.get(url, timeout=2.0)
-            if r.status_code != 200:
-                return None
-            data = r.json()
-            if isinstance(data, dict):
-                # Keep it small-ish
-                return data
-        except Exception:
-            return None
-        return None
-
     def _mdns_device_and_friendly(txt: dict[str, str] | None, best_name: str | None) -> tuple[str | None, str | None]:
         """Derive model-like (device_name) and friendly names from TXT/best_name."""
         if not isinstance(txt, dict):
