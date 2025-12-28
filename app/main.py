@@ -124,6 +124,20 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         s = s.replace("\u2019", "'").replace("\u2018", "'")
         return s
 
+    def _fetch_googlecast_info(ip: str, port: int | None = None) -> dict[str, object] | None:
+        url = f"http://{ip}:{port or 8008}/setup/eureka_info?options=detail"
+        try:
+            r = httpx.get(url, timeout=2.0)
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            if isinstance(data, dict):
+                # Keep it small-ish
+                return data
+        except Exception:
+            return None
+        return None
+
     def _mdns_device_and_friendly(txt: dict[str, str] | None, best_name: str | None) -> tuple[str | None, str | None]:
         """Derive model-like (device_name) and friendly names from TXT/best_name."""
         if not isinstance(txt, dict):
@@ -165,6 +179,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                     "mdns_service_types": d.mdns_service_types,
                     "mdns_instances": d.mdns_instances,
                     "mdns_txt": d.mdns_txt,
+                    "googlecast_info": d.googlecast_info,
                     "first_seen": _dt_iso(d.first_seen),
                     "last_seen": _dt_iso(d.last_seen),
                 }
@@ -670,6 +685,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             "mdns_txt": d.mdns_txt,
             "first_seen": _dt_iso(d.first_seen),
             "last_seen": _dt_iso(d.last_seen),
+            "googlecast_info": d.googlecast_info,
         }
 
     @app.get("/ui/devices", response_class=HTMLResponse)

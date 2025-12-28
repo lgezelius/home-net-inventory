@@ -23,6 +23,7 @@ class Device(Base):
     mdns_instances: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     mdns_txt: Mapped[dict[str, str] | None] = mapped_column(JSON, nullable=True)
     mdns_srv: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)  # SRV targets/ports per instance
+    googlecast_info: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)  # from /setup/eureka_info
 
     __table_args__ = (
         UniqueConstraint("mac", name="uq_devices_mac"),
