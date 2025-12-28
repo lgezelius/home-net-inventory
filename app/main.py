@@ -73,6 +73,18 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         "_sleep-proxy._udp": "Sleep Proxy",
         "_trel._udp": "Thread TREL",
         "_orb._tcp": "Orb Sensor",
+        "_remotepairing._tcp": "Remote Pairing",
+        "_apple-mobdev2._tcp": "Apple Mobile Device",
+        "_pdl-datastream._tcp": "Printer Data Stream",
+        "_cdm._tcp": "Cable Modem",
+        "_home-assistant._tcp": "Home Assistant",
+        "_googlerpc._tcp": "Google RPC",
+        "_appletv-v2._tcp": "Apple TV (v2)",
+        "_home-sharing._tcp": "Home Sharing",
+        "_rdlink._tcp": "Remote Desktop Link",
+        "_ippusb._tcp": "IPP over USB",
+        "_smb._tcp": "SMB File Sharing",
+        "_afpovertcp._tcp": "AFP File Sharing",
     }
 
     resolved_url = db_url or settings.resolved_db_url()
