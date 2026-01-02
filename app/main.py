@@ -260,7 +260,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         return model, friendly
 
     def _serialize_devices(db: Session, limit: int | None = None) -> list[dict[str, object]]:
-        query = select(Device).order_by(desc(Device.last_seen))
+        query = select(Device).order_by(desc(Device.ip))
         if limit and limit > 0:
             query = query.limit(limit)
         devices = db.scalars(query).all()
