@@ -49,6 +49,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         "_apple-mobdev2._tcp": "Apple Mobile Device",
         "_appletv-v2._tcp": "Apple TV (v2)",
         "_asquic._udp": "Apple QUIC",
+        "_cdm._tcp": "HP Cloud / Device Management",
         "_companion-link._tcp": "Apple Companion Link",
         "_daap._tcp": "DAAP / iTunes",
         "_dlna._tcp": "DLNA/UPnP",
