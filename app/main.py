@@ -3,7 +3,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, asc, func
 import threading
 import time
 import os
@@ -260,7 +260,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         return model, friendly
 
     def _serialize_devices(db: Session, limit: int | None = None) -> list[dict[str, object]]:
-        query = select(Device).order_by(desc(Device.ip))
+        query = select(Device).order_by(asc(Device.ip))
         if limit and limit > 0:
             query = query.limit(limit)
         devices = db.scalars(query).all()
