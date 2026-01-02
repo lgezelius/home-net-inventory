@@ -635,8 +635,8 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
             if hostname and not device.display_name:
                 device.display_name = hostname
 
-        # Opportunistically fetch Google Cast info if present and not yet stored.
-        if ip and device.googlecast_info is None:
+        # Opportunistically fetch Google Cast info if present.
+        if ip:
             has_cast = False
             for st in device.mdns_service_types or []:
                 if st and "_googlecast._tcp" in st:
