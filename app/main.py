@@ -523,6 +523,12 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
                 browsers.append(ServiceBrowser(zc, stype, l))
             time.sleep(timeout_seconds)
         finally:
+            # Stop all browsers to avoid thread leaks across scans.
+            for b in browsers:
+                try:
+                    b.cancel()
+                except Exception:
+                    pass
             try:
                 zc.close()
             except Exception:
