@@ -16,9 +16,9 @@
         <tr class="text-left text-xs uppercase tracking-wide text-slate-400">
           <th class="px-4 py-3 w-48">Name</th>
           <th class="px-4 py-3 w-40">Device</th>
-          <th class="px-4 py-3 w-40">MAC</th>
           <th class="px-4 py-3 w-44">IP</th>
-          <th class="px-4 py-3 w-32">Vendor</th>
+          <th class="px-4 py-3 w-40">MAC</th>
+          <th class="px-4 py-3 w-32">MAC Vendor</th>
           <th class="px-4 py-3 w-40">Last seen</th>
         </tr>
       </thead>
@@ -42,13 +42,13 @@
             <div class="text-xs text-slate-400">Model: {{ d.mdns_txt.model }}</div>
             {% endif %}
           </td>
-          <td class="px-4 py-3 text-sm font-mono text-slate-200">{{ d.mac or "—" }}</td>
           <td class="px-4 py-3">
             <div class="text-sm font-mono text-slate-200">{{ d.ip or "—" }}</div>
             {% if d.hostname %}
             <div class="text-xs text-slate-400">{{ d.hostname }}</div>
             {% endif %}
           </td>
+          <td class="px-4 py-3 text-sm font-mono text-slate-200">{{ d.mac or "—" }}</td>
           <td class="px-4 py-3 text-sm text-slate-200">{{ d.vendor or "—" }}</td>
           <td class="px-4 py-3 text-sm text-slate-200">
             {% if d.last_seen %}
