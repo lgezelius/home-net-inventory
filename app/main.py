@@ -84,7 +84,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         "_spotify-connect._tcp": "Spotify Connect",
         "_srpl-tls._tcp": "Sleep Proxy (TLS)",
         "_ssh._tcp": "SSH",
-        "_touch-able._tcp": "legacy Apple DMAP",
+        "_touch-able._tcp": "Apple DMAP (legacy)",
         "_trel._udp": "Thread TREL",
         "_uscan._tcp": "AirScan (eSCL)",
         "_uscans._tcp": "AirScan (eSCL) over TLS",
