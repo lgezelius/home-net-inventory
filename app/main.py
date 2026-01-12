@@ -74,6 +74,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         "_rdlink._tcp": "Remote Desktop Link",
         "_remotepairing._tcp": "Remote Pairing",
         "_rfb._tcp": "Screen Sharing (RFB)",
+        "_rp-tunnel._tcp": "Apple Remote Path Tunnel",
         "_sftp-ssh._tcp": "SFTP",
         "_sleep-proxy._udp": "Sleep Proxy",
         "_smartthings._tcp": "SmartThings",
