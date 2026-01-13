@@ -53,6 +53,7 @@ def create_app(*, start_scanner: bool = True, db_url: str | None = None) -> Fast
         "_companion-link._tcp": "Apple Companion Link",
         "_daap._tcp": "DAAP / iTunes",
         "_dlna._tcp": "DLNA/UPnP",
+        "_ghp._tcp": "Google Home Protocol",
         "_googcrossdevice._tcp": "Google Cross-Device",
         "_googlecast._tcp": "Chromecast / Google Cast",
         "_googlerpc._tcp": "Google RPC",
